@@ -24,6 +24,7 @@ import VaultABI from "../abi/Vault.json";
 import IERC20ABI from "../abi/IERC20.json";
 import VaultCore from "../abi/VaultCore.json";
 import CollateralPoolABI from "../abi/CollateralPool.json";
+import CollateralPoolV2ABI from "../abi/CollateralPoolV2.json";
 import VaultBatchManagerABI from "../abi/VaultBatchManager.json";
 import { isOzRelayerEnabled, OzRelayerClient } from "./oz_relayer_client";
 
@@ -407,6 +408,23 @@ export class VaultManager {
     }
   }
 
+  private async _getV2UserWithdrawAmount(
+    vaultAddress: string,
+    userAddress: string,
+    state: bigint | number,
+  ): Promise<bigint> {
+    const pool = new ethers.Contract(
+      this.config.collateralPoolV2,
+      CollateralPoolV2ABI,
+      this.signer,
+    );
+    const ub = await pool.userVaultBalance(vaultAddress, userAddress);
+    const isSwapped = Number(state) === 1;
+    return isSwapped
+      ? BigInt(ub.linkedTokenTotal)
+      : BigInt(ub.investmentTokenYield) + BigInt(ub.principal);
+  }
+
   async createVault(createVaultOptions) {
     const isBuyLow = !!createVaultOptions.isBuyLow;
     const useCollateralPool = !!createVaultOptions.useCollateralPool;
@@ -509,7 +527,7 @@ export class VaultManager {
     // Future works: we should derive a more accurate value.
     const priceRate = Math.ceil(
       parseFloat(updatePriceData.parsed[0].ema_price.price) /
-      Math.pow(10, priceFeedDecimals),
+        Math.pow(10, priceFeedDecimals),
     );
     const oraclePriceAtCreationBN = parseUnits(
       priceRate.toString(),
@@ -1011,22 +1029,30 @@ export class VaultManager {
     const [
       owner,
       expiry,
+      withdrawalUnlockTimeRaw,
       isBuyLow,
       state,
       investmentTokenAddress,
       linkedTokenAddress,
+      versionRaw,
     ] = await Promise.all([
       vault.owner(),
       vault.expiry(),
+      vault.withdrawalUnlockTime().catch(() => null),
       vault.isBuyLow(),
       vault.state(),
       vault.investmentToken(),
       vault.linkedToken(),
+      vault.version().catch(() => null),
     ]);
     this.provider.isMulticallEnabled = false;
 
+    // Older vaults fall back to expiry time and set 0 as version
+    const withdrawalUnlockTime = withdrawalUnlockTimeRaw ?? expiry;
+    const seriesVersion = Math.floor(Number(versionRaw ?? 0) / 100);
+
     console.log(`Withdrawing vault ${vaultAddress}...`);
-    if (Date.now() < Number(expiry) * 1000) {
+    if (Date.now() < Number(withdrawalUnlockTime) * 1000) {
       console.error(
         `Vault ${vaultAddress} is not yet available for withdrawal`,
       );
@@ -1035,12 +1061,12 @@ export class VaultManager {
 
     if (checkOwner && owner !== account) {
       console.error(
-        `account ${account} is not the owner of the vault ${vaultAddress}`,
+        `Account ${account} is not the owner of the vault ${vaultAddress}`,
       );
       return;
     } else if (!checkOwner && owner === account) {
       console.error(
-        `account ${account} is the owner of the vault ${vaultAddress}`,
+        `Account ${account} is the owner of the vault ${vaultAddress}`,
       );
       return;
     }
@@ -1074,6 +1100,13 @@ export class VaultManager {
     let result = null;
     try {
       if (owner === account) {
+        if (seriesVersion >= 2) {
+          // V2 vaults do not support LP withdrawal
+          console.error(
+            `V2 Vault ${vaultAddress} does not support LP withdrawal`,
+          );
+          return;
+        }
         if (state == 1) {
           // Check investment token balance in the vault, if it's 0, then LP has withdrawn the vault
           const investmentTokenBalance =
@@ -1108,13 +1141,27 @@ export class VaultManager {
           overrides: { value: updateFee },
         });
       } else {
-        // Check this.account balance in the vault, if it's 0, then subscriber has withdrawn the vault
-        const balances = await vault.balances(account);
-        if (BigInt(balances) == zeroBigNumber) {
-          console.error(
-            `account ${account} has no balance in the vault ${vaultAddress}`,
+        // Check subscriber balances in CollateralPoolV2
+        if (seriesVersion >= 2) {
+          const withdrawAmount = await this._getV2UserWithdrawAmount(
+            vaultAddress,
+            account,
+            state,
           );
-          return;
+          if (withdrawAmount == zeroBigNumber) {
+            console.error(
+              `Account ${account} has already withdrawn the vault ${vaultAddress}`,
+            );
+            return;
+          }
+        } else {
+          const balances = await vault.balances(account);
+          if (BigInt(balances) == zeroBigNumber) {
+            console.error(
+              `Account ${account} has no balance in the vault ${vaultAddress}`,
+            );
+            return;
+          }
         }
 
         await this._simulateTransaction(() =>
@@ -1352,23 +1399,29 @@ export class VaultManager {
       vaultContracts.map(async (vault) => {
         const [
           expiry,
+          withdrawalUnlockTimeRaw,
           owner,
           investmentTokenAddress,
           linkedTokenAddress,
           isBuyLow,
           state,
-          version,
+          versionRaw,
           depositTotalRaw,
         ] = await Promise.all([
           vault.expiry(),
+          vault.withdrawalUnlockTime().catch(() => null),
           vault.owner(),
           vault.investmentToken(),
           vault.linkedToken(),
           vault.isBuyLow(),
           vault.state(),
-          vault.version(),
+          vault.version().catch(() => null),
           vault.depositTotal(),
         ]);
+
+        // Older vaults fall back to expiry time and set 0 as version
+        const withdrawalUnlockTime = withdrawalUnlockTimeRaw ?? expiry;
+        const version = versionRaw ?? 0;
 
         // Determine useCollateralPool based on version
         const useCollateralPool = await this._checkUseCollateralPool(
@@ -1379,11 +1432,13 @@ export class VaultManager {
         return {
           address: vault.target,
           expiry,
+          withdrawalUnlockTime,
           owner,
           investmentTokenAddress,
           linkedTokenAddress,
           isBuyLow,
           state,
+          seriesVersion: Math.floor(Number(version) / 100),
           useCollateralPool,
           depositTotalRaw,
         };
@@ -1397,7 +1452,7 @@ export class VaultManager {
       const vaultData = basicVaultData[i];
       const vault = vaultContracts[i];
 
-      if (Date.now() < Number(vaultData.expiry) * 1000) {
+      if (Date.now() < Number(vaultData.withdrawalUnlockTime) * 1000) {
         console.error(
           `Skip vault ${vaultAddress}: vault is not yet available for withdrawal`,
         );
@@ -1427,6 +1482,13 @@ export class VaultManager {
       );
       const isLp = vaultData.owner === account;
       if (isLp) {
+        if (vaultData.seriesVersion >= 2) {
+          // V2 vaults do not support LP withdrawal
+          console.error(
+            `Skip vault ${vaultAddress}: V2 vault does not support LP withdrawal`,
+          );
+          continue;
+        }
         const depositTotal = BigInt(vaultData.depositTotalRaw);
         // If the vault is using collateral pool and no user deposit, then there's no locked vault for the lp to withdraw
         if (vaultData.useCollateralPool && depositTotal == zeroBigNumber) {
@@ -1455,12 +1517,27 @@ export class VaultManager {
           }
         }
       } else {
-        const balances = await vault.balances(account);
-        if (BigInt(balances) == zeroBigNumber) {
-          console.error(
-            `Skip vault ${vaultAddress}: subscriber ${account} has no balance in the vault`,
+        // Check subscriber balances in CollateralPoolV2
+        if (vaultData.seriesVersion >= 2) {
+          const withdrawAmount = await this._getV2UserWithdrawAmount(
+            vaultAddress,
+            account,
+            vaultData.state,
           );
-          continue;
+          if (withdrawAmount == zeroBigNumber) {
+            console.error(
+              `Skip vault ${vaultAddress}: Subscriber ${account} has already withdrawn the vault`,
+            );
+            continue;
+          }
+        } else {
+          const balances = await vault.balances(account);
+          if (BigInt(balances) == zeroBigNumber) {
+            console.error(
+              `Skip vault ${vaultAddress}: Subscriber ${account} has no balance in the vault`,
+            );
+            continue;
+          }
         }
       }
 

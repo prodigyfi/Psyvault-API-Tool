@@ -1,9 +1,9 @@
 import {
   Configuration,
   RelayersApi,
+  Speed,
   type EvmTransactionRequest,
   type NetworkTransactionRequest,
-  Speed,
   type ApiResponseTransactionResponse,
   type ApiResponseTransactionResponseData,
 } from "@openzeppelin/relayer-sdk";
@@ -32,12 +32,31 @@ function toSpeed(speed?: string): Speed | undefined {
   return undefined;
 }
 
-function toSafeNumber(value: bigint): number {
-  const n = Number(value);
-  if (!Number.isSafeInteger(n)) {
-    throw new Error("Value is too large for relayer numeric field");
+function toRelayerNumber(value: bigint | number, fieldName: string): number {
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error(
+        `Relayer ${fieldName} must be a non-negative safe integer`,
+      );
+    }
+    return value;
   }
-  return n;
+
+  if (value < 0n) {
+    throw new Error(`Relayer ${fieldName} must be a non-negative integer`);
+  }
+
+  const numberValue = Number(value);
+  if (
+    !Number.isFinite(numberValue) ||
+    !Number.isInteger(numberValue) ||
+    BigInt(numberValue) !== value
+  ) {
+    throw new Error(
+      `Relayer ${fieldName} cannot be represented exactly as a number`,
+    );
+  }
+  return numberValue;
 }
 
 export class OzRelayerClient {
@@ -76,13 +95,10 @@ export class OzRelayerClient {
     const body: EvmTransactionRequest = {
       to: args.to,
       data: args.data,
-      value: toSafeNumber(args.value ?? 0n),
+      value: toRelayerNumber(args.value ?? 0n, "value"),
     };
     if (args.gasLimit !== undefined) {
-      body.gas_limit =
-        typeof args.gasLimit === "bigint"
-          ? toSafeNumber(args.gasLimit)
-          : args.gasLimit;
+      body.gas_limit = toRelayerNumber(args.gasLimit, "gas_limit");
     }
     if (this.speed) {
       body.speed = this.speed;

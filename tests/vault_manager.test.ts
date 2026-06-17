@@ -785,8 +785,10 @@ describe("VaultManager withdrawVault", () => {
     investmentToken: jest.fn().mockReturnValue(tradingPairConfig.quoteToken),
     linkedToken: jest.fn().mockReturnValue(tradingPairConfig.baseToken),
     expiry: jest.fn().mockReturnValue(mockBuyLowVaultOptions.expiry),
+    withdrawalUnlockTime: jest.fn<() => Promise<unknown>>().mockResolvedValue(mockBuyLowVaultOptions.expiry + 7200),
     balances: jest.fn().mockReturnValue("1"),
     balanceOf: jest.fn().mockReturnValue("1"),
+    version: jest.fn<() => Promise<number>>().mockResolvedValue(8), // Series 1 vault, version 8
     withdraw: (() => {
       const fn = jest.fn().mockReturnValue(mockWithdrawWait);
       (fn as any).staticCall = jest
@@ -950,6 +952,135 @@ describe("VaultManager withdrawVault", () => {
 
     expect(mockContract.withdraw).toHaveBeenCalledTimes(1);
   });
+
+  test("Subscriber withdraw v2 vault checks CollateralPoolV2 balance", async () => {
+    const mockContract = {
+      ...mockWithdrawContract,
+      owner: jest
+        .fn()
+        .mockReturnValue("0x0000000000000000000000000000000000000000"),
+      state: jest.fn().mockReturnValue(2),
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(208), // Series 2 vault
+      // V2 subscriber balances live in CollateralPoolV2
+      userVaultBalance: jest.fn<() => Promise<object>>().mockResolvedValue({
+        principal: "100",
+        linkedTokenTotal: "0",
+        investmentTokenYield: "0",
+      }),
+      balances: jest.fn(),
+      symbol: jest.fn().mockReturnValueOnce("WETH").mockReturnValueOnce("USDC"),
+    };
+
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(mockContract as unknown as ethers.Contract);
+    jest
+      .spyOn(vaultManager.pythConnection, "getPriceUpdatesAtTimestamp")
+      .mockResolvedValue({
+        binary: { encoding: "hex", data: [mockHexData] },
+        parsed: mockedParsedData,
+      });
+
+    await vaultManager.withdrawVault(mockVaultAddress, false);
+
+    expect(mockContract.balances).not.toHaveBeenCalled();
+    expect(mockContract.userVaultBalance).toHaveBeenCalledWith(
+      mockVaultAddress,
+      await vaultManager.signer.getAddress(),
+    );
+    expect(mockContract.withdraw).toHaveBeenCalledTimes(1);
+  });
+
+  test("Subscriber withdraw v2 vault with zero balance is skipped", async () => {
+    const mockContract = {
+      ...mockWithdrawContract,
+      owner: jest
+        .fn()
+        .mockReturnValue("0x0000000000000000000000000000000000000000"),
+      state: jest.fn().mockReturnValue(2),
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(208), // Series 2 vault
+      // nothing to withdraw
+      userVaultBalance: jest.fn<() => Promise<object>>().mockResolvedValue({
+        principal: "0",
+        linkedTokenTotal: "0",
+        investmentTokenYield: "0",
+      }),
+      symbol: jest.fn().mockReturnValueOnce("WETH").mockReturnValueOnce("USDC"),
+    };
+
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(mockContract as unknown as ethers.Contract);
+    jest
+      .spyOn(vaultManager.pythConnection, "getPriceUpdatesAtTimestamp")
+      .mockResolvedValue({
+        binary: { encoding: "hex", data: [mockHexData] },
+        parsed: mockedParsedData,
+      });
+
+    await vaultManager.withdrawVault(mockVaultAddress, false);
+
+    expect(mockContract.userVaultBalance).toHaveBeenCalled();
+    expect(mockContract.withdraw).not.toHaveBeenCalled();
+  });
+
+  test("V2 vault LP withdraw will be skipped", async () => {
+    const mockContract = {
+      ...mockWithdrawContract,
+      owner: jest.fn().mockReturnValue(mockConfig.account), // LP
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(208), // Series 2 vault
+      symbol: jest.fn().mockReturnValueOnce("WETH").mockReturnValueOnce("USDC"),
+    };
+
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(mockContract as unknown as ethers.Contract);
+    jest
+      .spyOn(vaultManager.pythConnection, "getPriceUpdatesAtTimestamp")
+      .mockResolvedValue({
+        binary: { encoding: "hex", data: [mockHexData] },
+        parsed: mockedParsedData,
+      });
+
+    await vaultManager.withdrawVault(mockVaultAddress, true);
+
+    expect(mockContract.lpWithdraw).not.toHaveBeenCalled();
+  });
+
+  test("Older vault falls back to V1 path", async () => {
+    const mockContract = {
+      ...mockWithdrawContract,
+      owner: jest
+        .fn()
+        .mockReturnValue("0x0000000000000000000000000000000000000000"),
+      // Older vaults calls reject
+      withdrawalUnlockTime: jest
+        .fn<() => Promise<number>>()
+        .mockRejectedValue(new Error("missing revert data")),
+      version: jest
+        .fn<() => Promise<number>>()
+        .mockRejectedValue(new Error("missing revert data")),
+      expiry: jest.fn().mockReturnValue(mockBuyLowVaultOptions.expiry),
+      symbol: jest.fn().mockReturnValueOnce("WETH").mockReturnValueOnce("USDC"),
+    };
+
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(mockContract as unknown as ethers.Contract);
+    jest
+      .spyOn(vaultManager.pythConnection, "getPriceUpdatesAtTimestamp")
+      .mockResolvedValue({
+        binary: { encoding: "hex", data: [mockHexData] },
+        parsed: mockedParsedData,
+      });
+
+    // withdrawalUnlockTime falls back to expiry,
+    // version falls back to seriesVersion 0 (V1 path)
+    await vaultManager.withdrawVault(mockVaultAddress, false);
+
+    expect(mockContract.balances).toHaveBeenCalled();
+    expect(mockContract.withdraw).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("VaultManager groupVaultsByTradingPairAndExpiry", () => {
@@ -1041,13 +1172,14 @@ describe("VaultManager withdrawMultipleVaults", () => {
 
   const mockVaultContract = {
     expiry: jest.fn().mockReturnValue("1731657600"),
+    withdrawalUnlockTime: jest.fn<() => Promise<unknown>>().mockResolvedValue("1731664800"), // expiry + 2 hours
     owner: jest.fn().mockReturnValue(mockConfig.account),
     investmentToken: jest.fn().mockReturnValue(tradingPairConfig.quoteToken),
     linkedToken: jest.fn().mockReturnValue(tradingPairConfig.baseToken),
     state: jest.fn().mockReturnValue(1),
     balances: jest.fn().mockReturnValue("100"),
     isBuyLow: jest.fn().mockReturnValue(true),
-    version: jest.fn().mockReturnValue(8), // Series 1 vault, version 8
+    version: jest.fn<() => Promise<number>>().mockResolvedValue(8), // Series 1 vault, version 8
     useCollateralPool: jest.fn().mockReturnValue(false),
     depositTotal: jest.fn().mockReturnValue("100"),
   };
@@ -1354,6 +1486,7 @@ describe("VaultManager showVault", () => {
       quantity: jest.fn().mockReturnValue(2000000n),
       state: jest.fn().mockReturnValue(0n),
       expiry: jest.fn().mockReturnValue(1730344973n),
+      withdrawalUnlockTime: jest.fn<() => Promise<unknown>>().mockResolvedValue(1730352173n), // expiry + 7200
       depositTotal: jest.fn().mockReturnValue(1000000n),
       decimals: jest.fn().mockReturnValue(6),
     };
@@ -1448,7 +1581,7 @@ describe("VaultManager adjustVaultYield", () => {
         return fn;
       })(),
       yieldValue: jest.fn<() => Promise<string>>().mockResolvedValue("0"),
-      version: jest.fn().mockReturnValue(208), // Series 2 vault, version 208 (2.08)
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(208), // Series 2 vault, version 208 (2.08)
       useCollateralPool: jest.fn().mockReturnValue(true),
       isBuyLow: jest.fn().mockReturnValue(true),
       investmentToken: jest.fn().mockReturnValue(tradingPairConfig.quoteToken),
@@ -1508,7 +1641,7 @@ describe("VaultManager adjustVaultYield", () => {
           .mockImplementation(() => Promise.resolve());
         return fn;
       })(),
-      version: jest.fn().mockReturnValue(8), // Series 1 vault, version 8 (1.08)
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(8), // Series 1 vault, version 8 (1.08)
       useCollateralPool: jest.fn().mockReturnValue(false),
       linkedToken: jest.fn().mockReturnValue(tradingPairConfig.baseToken),
       investmentToken: jest.fn().mockReturnValue(tradingPairConfig.quoteToken),
@@ -1595,7 +1728,7 @@ describe("VaultManager approveVault for collateral pool", () => {
 
   test("should call approveVault with true for series 2 vault using collateralPoolV2", async () => {
     const mockVaultContract = {
-      version: jest.fn().mockReturnValue(208), // Series 2 vault, version 208
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(208), // Series 2 vault, version 208
       useCollateralPool: jest.fn().mockReturnValue(true),
     };
     const spyContract = jest
@@ -1624,7 +1757,7 @@ describe("VaultManager approveVault for collateral pool", () => {
 
   test("should call approveVault with true for series 1 vault using collateralPool", async () => {
     const mockVaultContract = {
-      version: jest.fn().mockReturnValue(8), // Series 1 vault, version 8
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(8), // Series 1 vault, version 8
       useCollateralPool: jest.fn().mockReturnValue(true),
     };
     const spyContract = jest
@@ -1653,7 +1786,7 @@ describe("VaultManager approveVault for collateral pool", () => {
 
   test("should call approveVault with false and log success", async () => {
     const mockVaultContract = {
-      version: jest.fn().mockReturnValue(208), // Series 2 vault, version 208
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(208), // Series 2 vault, version 208
       useCollateralPool: jest.fn().mockReturnValue(true),
     };
     const spyContract = jest
@@ -1680,7 +1813,7 @@ describe("VaultManager approveVault for collateral pool", () => {
       throw { shortMessage: "fail" };
     });
     const mockVaultContract = {
-      version: jest.fn().mockReturnValue(208), // Series 2 vault, version 208
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(208), // Series 2 vault, version 208
       useCollateralPool: jest.fn().mockReturnValue(true),
     };
     const spyContract = jest
@@ -1705,7 +1838,7 @@ describe("VaultManager approveVault for collateral pool", () => {
 
   test("should log error if vault is not using collateral pool", async () => {
     const mockVaultContract = {
-      version: jest.fn().mockReturnValue(8), // Series 1 vault, version 8
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(8), // Series 1 vault, version 8
       useCollateralPool: jest.fn().mockReturnValue(false),
     };
     const spyContract = jest
