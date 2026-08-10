@@ -1,17 +1,19 @@
 {
   "basicSettings": {
-    "hermesApiBaseUrl": "https://hermes.pyth.network/"
+    "hermesApiBaseUrl": "https://pyth.dourolabs.app/hermes/",
+    "pythApiKey": "YOUR_PYTH_API_KEY"
   },
   "Bera Mainnet": {
     "rpcNode": "https://berachain-rpc.publicnode.com",
     "account": "lp_account",
+    "is7702Account": false,
     "jsonWallet": "keystore/wallet.json",
     "passphrase": "passphrase",
     "factory": "0x29ca87b2f744127606ada4564da8219be6498ca1",
     "router": "0xe67447e82d0b0ee124c8ecfa442f00811bcc5d0b",
     "vaultBatchManager": "0x39Fa3B95B74aB1E66a87D1dc70dA1f6725B49965",
     "pythAggregator": "0xc29d4eb234145bf009c28b0cd89c75b9072ea125",
-    "pythPriceFeed": "0x2880aB155794e7179c9eE2e38200202908C17B43",
+    "pythPriceFeed": "0x2F968931d1B7326d2875E9500980211dcc535eE5",
     "collateralPool": "0x5d53e5BC2ed68BB19f16D2D525039bAB2eC1f4c1",
     "collateralPoolV2": "0x999A87E0148eA3023b7AeFDB0D7d7D21781704a2",
     "tradingPairs": {
@@ -47,13 +49,14 @@
   "Base Mainnet": {
     "rpcNode": "https://base-rpc.publicnode.com",
     "account": "lp_account",
+    "is7702Account": false,
     "jsonWallet": "keystore/wallet.json",
     "passphrase": "passphrase",
     "factory": "0xFE198B51cfb1F96b56c63fe323a934BEAAA3b281",
     "router": "0x67F671EEc6a7015941cBE5B4397ACceC829aFA3e",
     "vaultBatchManager": "0x00B47EE1AF66e8928106aaCBfB3E8673D896F6ad",
     "pythAggregator": "0x2D9DBCe6f1E04ae3377b4175281d293626f82A02",
-    "pythPriceFeed": "0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a",
+    "pythPriceFeed": "0xbC16aee60f64864882BC6C4E428e148Fc0E272F5",
     "collateralPool": "0x4999b48c62D45708809Ea8a04516aA09BA3459d5",
     "collateralPoolV2": "0x2e1E454D9Ad7528ab668Fc919db3958e988f6485",
     "tradingPairs": {
@@ -152,13 +155,14 @@
   "Base Testnet": {
     "rpcNode": "https://base-sepolia-rpc.publicnode.com",
     "account": "lp_account",
+    "is7702Account": false,
     "jsonWallet": "keystore/wallet.json",
     "passphrase": "passphrase",
     "factory": "0x66fe572F6C943f9117E85b8cb008675348F1bF5e",
     "router": "0xAc0C062A9d0E11CFbb48b5ab84baB4dE31Ba80E1",
     "vaultBatchManager": "0x38442C6D8eA918dB1C497eB15d1F65628Eb61A43",
     "pythAggregator": "0x77Cb31b6013EbD8D9eC1533823a28A88e9aD5d42",
-    "pythPriceFeed": "0xA2aa501b19aff244D90cc15a4Cf739D2725B5729",
+    "pythPriceFeed": "0x5f52e4DBEA21f5b23523B6e20d50c29ae0a4EB83",
     "collateralPool": "0x2c4CF69941ab957e47a6C6cceD5A520cf14358cc",
     "collateralPoolV2": "0xaA7667d5ADc8197533851F0eF591734046b80a6e",
     "tradingPairs": {
@@ -239,13 +243,14 @@
   "Ethereum Mainnet": {
     "rpcNode": "https://ethereum-rpc.publicnode.com",
     "account": "lp_account",
+    "is7702Account": false,
     "jsonWallet": "keystore/wallet.json",
     "passphrase": "passphrase",
     "factory": "0xAC2a612C49f29e26858Df1a53f7623180bcc3753",
     "router": "0x137Df25cAbf220A180300604E57551AC1397959d",
     "vaultBatchManager": "0xb2B9a0C2441072Ca36d89c7B4DEcD6169a2c25fb",
     "pythAggregator": "0xF50c99923bf0077fAF298Cc1dB089318311cF3ee",
-    "pythPriceFeed": "0x4305FB66699C3B2702D4d05CF36551390A4c69C6",
+    "pythPriceFeed": "0x14b9932cc9AC8Ee03301665a8644A753f46D8552",
     "collateralPool": "0x18D87BB647cf70065e9Eb286957AD7681f4373d7",
     "collateralPoolV2": "0xb2d5c91F1e71078672F55C63ac0BBC3A9B1b3889",
     "tradingPairs": {
@@ -272,13 +277,14 @@
   "Ethereum Testnet": {
     "rpcNode": "https://ethereum-sepolia-rpc.publicnode.com",
     "account": "lp_account",
+    "is7702Account": false,
     "jsonWallet": "keystore/wallet.json",
     "passphrase": "passphrase",
     "factory": "0x4bD1e79d52E279B4F6b527CC32F93CD2beE01523",
     "router": "0xb2d5c91F1e71078672F55C63ac0BBC3A9B1b3889",
     "vaultBatchManager": "0xf365498d4298A47c33a6315547c7fF31e35e16E2",
     "pythAggregator": "0x0Ead9e452404fa37885b11F9535C7FaadC4955cA",
-    "pythPriceFeed": "0xDd24F84d36BF92C65F92307595335bdFab5Bbd21",
+    "pythPriceFeed": "0xBb86bCc951A62DF86826219d9251Ee05F2c1e286",
     "collateralPool": "0x19E9D6aF9a21d0a332Feb2b6D5890f60aaD9DD42",
     "collateralPoolV2": "0x64369e4296022ad8b85400CC97286DEE84096523",
     "tradingPairs": {
@@ -351,6 +357,49 @@
         "priceFeed": {
           "type": "PYTH",
           "id": "0x8132e3eb1dac3e56939a16ff83848d194345f6688bff97eb1c8bd462d558802b",
+          "decimals": "8"
+        }
+      }
+    }
+  },
+  "HyperEVM Mainnet": {
+    "rpcNode": "https://rpc.hyperliquid.xyz/evm",
+    "account": "lp_account",
+    "is7702Account": false,
+    "jsonWallet": "keystore/wallet.json",
+    "passphrase": "passphrase",
+    "factory": "0x400516840d0E975A566B1E275aaB58Df9b7C278d",
+    "router": "0xc29D4eb234145BF009C28b0cD89C75b9072EA125",
+    "vaultBatchManager": "0x4e2d71834D755417fE6ADC4a2F621Fd87e01df26",
+    "pythAggregator": "0xC87bcAAF7B0Af30056e068DCa5b5358BD940451F",
+    "pythPriceFeed": "0xe9d69CdD6Fe41e7B621B4A688C5D1a68cB5c8ADc",
+    "collateralPool": "0xf2d3A7B4e093A9529a92888f3A6841f5cA5c2a02",
+    "collateralPoolV2": "0xD7423A77de707351A47F8fa270c0a3AbA32a90bE",
+    "tradingPairs": {
+      "UBTC-USDC": {
+        "baseToken": "0x9FDBdA0A5e284c32744D2f17Ee5c74B284993463",
+        "quoteToken": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+          "decimals": "8"
+        }
+      },
+      "UETH-USDC": {
+        "baseToken": "0xBe6727B535545C67d5cAa73dEa54865B92CF7907",
+        "quoteToken": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+          "decimals": "8"
+        }
+      },
+      "WHYPE-USDC": {
+        "baseToken": "0x5555555555555555555555555555555555555555",
+        "quoteToken": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x4279e31cc369bbcc2faf022b382b080e32a8e689ff20fbc530d2a603eb6cd98b",
           "decimals": "8"
         }
       }

@@ -9,6 +9,7 @@ A command-line tool for managing PSY (Prodigy Structured Yield) vaults on the Pr
 | Base Mainnet     | `Base Mainnet`     |
 | Ethereum Mainnet | `Ethereum Mainnet` |
 | Bera Mainnet     | `Bera Mainnet`     |
+| HyperEVM Mainnet | `HyperEVM Mainnet` |
 | Base Testnet     | `Base Testnet`     |
 | Ethereum Testnet | `Ethereum Testnet` |
 
@@ -25,6 +26,7 @@ npm i
    - Update the config file with:
      - `jsonWallet`: Your encrypted wallet JSON filename
      - `passphrase`: The passphrase for your encrypted wallet
+     - `is7702Account` (optional): Whether the account is an EIP-7702 delegated account.
 
    If you don't have an encrypted wallet JSON file, you can create one:
 
@@ -39,7 +41,7 @@ npm i
 Run the program `npx ts-node ./src/main.ts "<NETWORK>" <COMMAND>`, where `<NETWORK>` is one of the keys listed in the Supported Networks table above.
 
 - `COMMAND`:
-  - `createVault --tradingPair <trading pair> --linkedPrice <price> --quantity <quantity> --expiry <UNIX epoch> --yieldPercentage <yield rate> [--isBuyLow] [--useCollateralPool] [--vaultSeriesVersion <version>] [--signer <address>]`: Create a vault with command line arguments. The `--vaultSeriesVersion` defaults to 1 if not specified. The `--signer` option is only supported for vault series version 2+; if not specified, it defaults to the owner address.
+  - `createVault --tradingPair <trading pair> --linkedPrice <price> --quantity <quantity> --expiry <UNIX epoch> --yieldPercentage <yield rate> [--isBuyLow] [--useCollateralPool] [--vaultSeriesVersion <version>] [--signer <address>] [--is7702Account <true|false>]`: Create a vault with command line arguments. The `--vaultSeriesVersion` defaults to 1 if not specified. The `--signer` option is only supported for vault series version 2+; if not specified, it defaults to the owner address. The `--is7702Account` option overrides the config field and the on-chain detection.
   - `cancelVault --vault <vault address>`: Cancel a specific vault
   - `cancelMultipleVaults --vault <vault address> [--bypassCheck]`: Cancel multiple vaults in batch
   - `approveVault --vault <vault address> --approve <true|false>`: Approve a specific to use collateral pool or not

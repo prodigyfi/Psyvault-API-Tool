@@ -22,6 +22,7 @@ import IPythABI from "@pythnetwork/pyth-sdk-solidity/abis/IPyth.json";
 const mockConfig = {
   rpcNode: "https://not.a.real.url",
   account: "0x1563915e194D8CfBA1943570603F7606A3115508",
+  is7702Account: false,
   jsonWallet: "mock_encrypted_json_path",
   passphrase: "mock_passphrase",
   factory: "0x3333333333333333333333333333333333333333",
@@ -87,6 +88,55 @@ describe("VaultManager constructor", () => {
   test("create new instance", () => {
     const vaultManager = new VaultManager(mockConfig, mockBasicSettings);
     expect(vaultManager).toBeInstanceOf(VaultManager);
+  });
+
+  test("uses the configured Pyth Pro Hermes endpoint and API key", () => {
+    const originalHermesUrl = process.env["PYTH_HERMES_URL"];
+    const originalPythApiKey = process.env["PYTH_API_KEY"];
+    process.env["PYTH_HERMES_URL"] = "https://pro.example/hermes/";
+    process.env["PYTH_API_KEY"] = "test-api-key";
+
+    try {
+      const vaultManager = new VaultManager(mockConfig, mockBasicSettings);
+      const pythConnection = vaultManager.pythConnection as any;
+      expect(pythConnection.baseURL).toBe("https://pro.example/hermes/");
+      expect(pythConnection.headers).toEqual({
+        Authorization: "Bearer test-api-key",
+      });
+    } finally {
+      if (originalHermesUrl) {
+        process.env["PYTH_HERMES_URL"] = originalHermesUrl;
+      } else {
+        delete process.env["PYTH_HERMES_URL"];
+      }
+      if (originalPythApiKey) {
+        process.env["PYTH_API_KEY"] = originalPythApiKey;
+      } else {
+        delete process.env["PYTH_API_KEY"];
+      }
+    }
+  });
+
+  test("uses the Pyth API key from basic settings", () => {
+    const originalPythApiKey = process.env["PYTH_API_KEY"];
+    delete process.env["PYTH_API_KEY"];
+
+    try {
+      const vaultManager = new VaultManager(mockConfig, {
+        ...mockBasicSettings,
+        pythApiKey: "config-api-key",
+      });
+      const pythConnection = vaultManager.pythConnection as any;
+      expect(pythConnection.headers).toEqual({
+        Authorization: "Bearer config-api-key",
+      });
+    } finally {
+      if (originalPythApiKey) {
+        process.env["PYTH_API_KEY"] = originalPythApiKey;
+      } else {
+        delete process.env["PYTH_API_KEY"];
+      }
+    }
   });
 
   test("throws error when required config fields are missing", () => {
@@ -236,6 +286,12 @@ describe("VaultManager createVault", () => {
       return fn;
     })(),
     balanceOf: jest.fn().mockReturnValue(900000000000000000000000000n),
+    allowance: jest
+      .fn()
+      .mockReturnValueOnce(0n)
+      .mockReturnValueOnce(1000000000000000000000000n)
+      .mockReturnValueOnce(0n)
+      .mockReturnValue(1000000000000000000000000n),
     name: jest.fn().mockReturnValue("ETH"),
     createVault: (() => {
       const fn = jest.fn().mockReturnValue({
@@ -485,6 +541,15 @@ describe("VaultManager createVault", () => {
     ).rejects.toThrow("decimals is not set");
   });
 
+  test("should throw error for invalid is7702Account value", async () => {
+    await expect(
+      vaultManager.createVault({
+        ...mockBuyLowVaultOptions,
+        is7702Account: "flse",
+      }),
+    ).rejects.toThrow('is7702Account value not valid');
+  });
+
   test("should throw error when using custom signer with vault series version 1", async () => {
     const createVaultOptionsWithSigner = {
       ...mockBuyLowVaultOptions,
@@ -506,6 +571,55 @@ describe("VaultManager createVault", () => {
     ).rejects.toThrow(
       "Custom signer is not supported for vault series version 1",
     );
+  });
+});
+
+describe("VaultManager _is7702Account", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const mockDelegatedCode = "0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b";
+
+  test("CLI override takes precedence over config", async () => {
+    const vaultManager = new VaultManager(mockConfig, mockBasicSettings);
+    const spyGetCode = jest.spyOn(vaultManager.provider, "getCode");
+
+    await expect(vaultManager._is7702Account(true)).resolves.toBe(true);
+    await expect(vaultManager._is7702Account(false)).resolves.toBe(false);
+    expect(spyGetCode).not.toHaveBeenCalled();
+  });
+
+  test("config field is used without on-chain detection", async () => {
+    const vaultManager = new VaultManager(
+      { ...mockConfig, is7702Account: true },
+      mockBasicSettings,
+    );
+    const spyGetCode = jest.spyOn(vaultManager.provider, "getCode");
+
+    await expect(vaultManager._is7702Account()).resolves.toBe(true);
+    expect(spyGetCode).not.toHaveBeenCalled();
+  });
+
+  test("detects EIP-7702 delegation on-chain and caches the result", async () => {
+    const configWithoutFlag = { ...mockConfig, is7702Account: undefined };
+    const vaultManager = new VaultManager(configWithoutFlag, mockBasicSettings);
+    const spyGetCode = jest
+      .spyOn(vaultManager.provider, "getCode")
+      .mockResolvedValue(mockDelegatedCode.toUpperCase().replace("0X", "0x"));
+
+    await expect(vaultManager._is7702Account()).resolves.toBe(true);
+    await expect(vaultManager._is7702Account()).resolves.toBe(true);
+    // The detection result is cached per instance
+    expect(spyGetCode).toHaveBeenCalledTimes(1);
+  });
+
+  test("plain EOA without code is not treated as 7702", async () => {
+    const configWithoutFlag = { ...mockConfig, is7702Account: undefined };
+    const vaultManager = new VaultManager(configWithoutFlag, mockBasicSettings);
+    jest.spyOn(vaultManager.provider, "getCode").mockResolvedValue("0x");
+
+    await expect(vaultManager._is7702Account()).resolves.toBe(false);
   });
 });
 
@@ -554,6 +668,10 @@ describe("VaultManager cancelVault", () => {
         return fn;
       })(),
       balanceOf: jest.fn().mockReturnValue(9000000000000000n),
+      allowance: jest
+        .fn()
+        .mockReturnValueOnce(0n)
+        .mockReturnValue(1000000000000000000000000n),
       name: jest.fn().mockReturnValue("ETH"),
     };
 
@@ -615,6 +733,10 @@ describe("VaultManager subscribeVault", () => {
         return fn;
       })(),
       balanceOf: jest.fn().mockReturnValue(9000000000000000n),
+      allowance: jest
+        .fn()
+        .mockReturnValueOnce(0n)
+        .mockReturnValue(1000000000000000000000000n),
       name: jest.fn().mockReturnValue("ETH"),
       isBuyLow: jest.fn().mockReturnValue(true),
       symbol: jest.fn().mockReturnValueOnce("WETH").mockReturnValueOnce("USDC"),
@@ -721,6 +843,10 @@ describe("VaultManager subscribeVault", () => {
         return fn;
       })(),
       balanceOf: jest.fn().mockReturnValue(9000000000000000n),
+      allowance: jest
+        .fn()
+        .mockReturnValueOnce(0n)
+        .mockReturnValue(1000000000000000000000000n),
       name: jest.fn().mockReturnValue("ETH"),
       isBuyLow: jest.fn().mockReturnValue(true),
       yieldValue: jest.fn().mockReturnValue(10000000000000000n),
@@ -785,7 +911,9 @@ describe("VaultManager withdrawVault", () => {
     investmentToken: jest.fn().mockReturnValue(tradingPairConfig.quoteToken),
     linkedToken: jest.fn().mockReturnValue(tradingPairConfig.baseToken),
     expiry: jest.fn().mockReturnValue(mockBuyLowVaultOptions.expiry),
-    withdrawalUnlockTime: jest.fn<() => Promise<unknown>>().mockResolvedValue(mockBuyLowVaultOptions.expiry + 7200),
+    withdrawalUnlockTime: jest
+      .fn<() => Promise<unknown>>()
+      .mockResolvedValue(mockBuyLowVaultOptions.expiry + 7200),
     balances: jest.fn().mockReturnValue("1"),
     balanceOf: jest.fn().mockReturnValue("1"),
     version: jest.fn<() => Promise<number>>().mockResolvedValue(8), // Series 1 vault, version 8
@@ -1172,7 +1300,9 @@ describe("VaultManager withdrawMultipleVaults", () => {
 
   const mockVaultContract = {
     expiry: jest.fn().mockReturnValue("1731657600"),
-    withdrawalUnlockTime: jest.fn<() => Promise<unknown>>().mockResolvedValue("1731664800"), // expiry + 2 hours
+    withdrawalUnlockTime: jest
+      .fn<() => Promise<unknown>>()
+      .mockResolvedValue("1731664800"), // expiry + 2 hours
     owner: jest.fn().mockReturnValue(mockConfig.account),
     investmentToken: jest.fn().mockReturnValue(tradingPairConfig.quoteToken),
     linkedToken: jest.fn().mockReturnValue(tradingPairConfig.baseToken),
@@ -1486,7 +1616,9 @@ describe("VaultManager showVault", () => {
       quantity: jest.fn().mockReturnValue(2000000n),
       state: jest.fn().mockReturnValue(0n),
       expiry: jest.fn().mockReturnValue(1730344973n),
-      withdrawalUnlockTime: jest.fn<() => Promise<unknown>>().mockResolvedValue(1730352173n), // expiry + 7200
+      withdrawalUnlockTime: jest
+        .fn<() => Promise<unknown>>()
+        .mockResolvedValue(1730352173n), // expiry + 7200
       depositTotal: jest.fn().mockReturnValue(1000000n),
       decimals: jest.fn().mockReturnValue(6),
     };
@@ -1855,5 +1987,89 @@ describe("VaultManager approveVault for collateral pool", () => {
       `Vault ${mockVaultAddress} is not using collateral pool`,
     );
     expect(mockApproveVault).not.toHaveBeenCalled();
+  });
+});
+
+describe("VaultManager _approveERC20", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+    jest.useRealTimers();
+  });
+
+  const vaultManager = new VaultManager(mockConfig, mockBasicSettings);
+  const spender = mockConfig.router;
+  const amount = "1000000";
+
+  const buildToken = (allowance: jest.Mock) => {
+    const approveWait = jest
+      .fn<() => Promise<object>>()
+      .mockResolvedValue({ status: 1 });
+    const token = {
+      balanceOf: jest.fn().mockReturnValue(9000000n),
+      allowance,
+      name: jest.fn().mockReturnValue("USDC"),
+      approve: (() => {
+        const fn = jest.fn().mockReturnValue({ wait: approveWait });
+        (fn as any).staticCall = jest
+          .fn()
+          .mockImplementation(() => Promise.resolve());
+        return fn;
+      })(),
+    };
+    return { token, approveWait };
+  };
+
+  test("skips the approve when the allowance already covers the amount", async () => {
+    const { token, approveWait } = buildToken(
+      jest.fn().mockReturnValue(1000000n),
+    );
+
+    await vaultManager._approveERC20(
+      token as unknown as ethers.Contract,
+      spender,
+      amount,
+    );
+
+    expect(token.approve).not.toHaveBeenCalled();
+    expect(approveWait).not.toHaveBeenCalled();
+  });
+
+  test("polls until the approved allowance is visible on the node", async () => {
+    jest.useFakeTimers();
+    const allowance = jest
+      .fn()
+      .mockReturnValueOnce(0n)
+      .mockReturnValueOnce(0n)
+      .mockReturnValueOnce(0n)
+      .mockReturnValue(1000000n);
+    const { token, approveWait } = buildToken(allowance);
+
+    const pending = vaultManager._approveERC20(
+      token as unknown as ethers.Contract,
+      spender,
+      amount,
+    );
+    await jest.advanceTimersByTimeAsync(5000);
+    await pending;
+
+    expect(token.approve).toHaveBeenCalledWith(spender, amount);
+    expect(approveWait).toHaveBeenCalledTimes(1);
+    expect(allowance.mock.calls.length).toBeGreaterThan(2);
+  });
+
+  test("throws when the allowance never becomes visible", async () => {
+    jest.useFakeTimers();
+    const { token } = buildToken(jest.fn().mockReturnValue(0n));
+
+    const pending = vaultManager._approveERC20(
+      token as unknown as ethers.Contract,
+      spender,
+      amount,
+    );
+    const assertion = expect(pending).rejects.toThrow(
+      `USDC allowance for ${spender} is still not visible after approve; the RPC node may be lagging behind`,
+    );
+    await jest.advanceTimersByTimeAsync(60000);
+    await assertion;
   });
 });

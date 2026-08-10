@@ -1,8 +1,12 @@
-import { existsSync, promises as fs } from "fs";
+import { existsSync, readFileSync, promises as fs } from "fs";
 import process from "process";
 import { parse } from "csv-parse/sync";
 import moment from "moment-timezone";
 import { execSync } from "child_process";
+import { ethers } from "ethers";
+import config from "../config.json";
+import { isOzRelayerEnabled } from "./oz_relayer_client";
+import { BlockchainConfig } from "./types";
 
 const DATA_SOURCE_FILE = "create-vaults.csv";
 const LOG_FILE = "batch_runner.log";
@@ -14,11 +18,14 @@ const networkOptions = [
   "Bera Mainnet",
   "Ethereum Testnet",
   "Ethereum Mainnet",
+  "HyperEVM Mainnet"  
 ];
 
 const tradingPairOptions = [
   "WETH-USDC",
+  "UETH-USDC",
   "WBTC-USDC",
+  "UBTC-USDC",
   "cbBTC-USDC",
   "WSOL-USDC",
   "DOGE-USDC",
@@ -26,6 +33,7 @@ const tradingPairOptions = [
   "PEPE-USDC",
   "VIRTUAL-USDC",
   "WBERA-USDC",
+  "WHYPE-USDC",
   "WETH-USDC.e",
   "WBTC-USDC.e",
   "WSOL-USDC.e",
@@ -134,6 +142,50 @@ function validate(dataSet): boolean {
   return valid;
 }
 
+// Per-network EIP-7702 detection cache
+const is7702Cache = new Map<string, boolean | undefined>();
+
+async function detect7702(network: string): Promise<boolean | undefined> {
+  if (is7702Cache.has(network)) {
+    return is7702Cache.get(network);
+  }
+
+  let result: boolean | undefined;
+  try {
+    const chainConfig = (config as unknown as Record<string, BlockchainConfig>)[
+      network
+    ];
+    if (chainConfig.is7702Account !== undefined) {
+      // main script reads the flag from config
+      result = undefined;
+    } else {
+      const address: string = isOzRelayerEnabled()
+        ? chainConfig.account
+        : JSON.parse(
+            readFileSync(`${process.cwd()}/${chainConfig.jsonWallet}`, "utf8"),
+          ).address;
+      const provider = new ethers.JsonRpcProvider(chainConfig.rpcNode);
+      try {
+        const code = await provider.getCode(
+          address.startsWith("0x") ? address : `0x${address}`,
+        );
+        // EIP-7702 delegation designator
+        result = code.toLowerCase().startsWith("0xef0100");
+      } finally {
+        provider.destroy();
+      }
+    }
+  } catch (error) {
+    console.error(
+      `EIP-7702 detection for "${network}" failed`,
+      error instanceof Error ? error.message : error,
+    );
+    result = undefined;
+  }
+  is7702Cache.set(network, result);
+  return result;
+}
+
 async function createVaults(dataSet) {
   let processed = false;
   for (const [index, line] of dataSet.entries()) {
@@ -161,8 +213,13 @@ async function createVaults(dataSet) {
     const exactExpiration = expireDate.hour(16).minute(0).second(0).unix();
     const buyLowFlag = direction === directionOptions[0] ? "--isBuyLow" : "";
 
+    // Detect EIP-7702 delegation once per network
+    const is7702 = await detect7702(network);
+    const is7702Flag =
+      is7702 === undefined ? "" : `--is7702Account ${is7702}`;
+
     // TODO: the command line only works under POSIX-compliant systems; additional efforts are required for Win32
-    const commandLine = `npx ts-node ./src/main.ts "${network}" createVault -t ${tradingPair} -p ${linkedPrice} -q ${quantity} -e ${exactExpiration} -y ${extractPercentage(yieldPercentage)} ${buyLowFlag} 2>&1 | tee -a ${LOG_FILE}`;
+    const commandLine = `npx ts-node ./src/main.ts "${network}" createVault -t ${tradingPair} -p ${linkedPrice} -q ${quantity} -e ${exactExpiration} -y ${extractPercentage(yieldPercentage)} ${buyLowFlag} ${is7702Flag} 2>&1 | tee -a ${LOG_FILE}`;
 
     // Do not really invoke main.ts in dry-run mode
     if (process.argv.length === 3 && process.argv[2] === "--dry-run") {

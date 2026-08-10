@@ -14,6 +14,7 @@ export type TradingPairs = { [key: string]: TradingPair };
 export type BlockchainConfig = {
   rpcNode: string;
   account: string;
+  is7702Account?: boolean;
   jsonWallet: string;
   passphrase: string;
   factory: string;
@@ -28,6 +29,7 @@ export type BlockchainConfig = {
 
 export type BasicSettings = {
   hermesApiBaseUrl: string;
+  pythApiKey?: string;
 };
 
 export type VaultData = {

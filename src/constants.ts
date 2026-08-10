@@ -8,6 +8,7 @@ export const createVaultOperationDefinitions = [
   { name: "tradingPair", alias: "t", type: String },
   { name: "signer", alias: "s", type: String },
   { name: "vaultSeriesVersion", type: Number },
+  { name: "is7702Account", type: String },
 ];
 
 export const subscribeVaultOperationDefinitions = [

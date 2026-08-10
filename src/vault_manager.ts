@@ -30,6 +30,9 @@ import { isOzRelayerEnabled, OzRelayerClient } from "./oz_relayer_client";
 
 const DEFAULT_VAULT_FETCH_COUNT = 100;
 
+const ALLOWANCE_VISIBILITY_ATTEMPTS = 10;
+const ALLOWANCE_VISIBILITY_INTERVAL_MS = 1_000;
+
 type VaultRangeOptions = {
   start?: number;
   count?: number;
@@ -54,6 +57,7 @@ export class VaultManager {
   router: ethers.Contract;
   vaultBatchManager: ethers.Contract;
   pythPriceFeed: ethers.Contract;
+  private detected7702?: boolean;
 
   constructor(config: BlockchainConfig, basicSettings: BasicSettings) {
     this.txMode = isOzRelayerEnabled() ? "relayer" : "local";
@@ -61,8 +65,14 @@ export class VaultManager {
       this.txMode === "relayer" ? new OzRelayerClient() : undefined;
     this.config = config;
     this.basicSettings = basicSettings;
-    this.pythConnection = new HermesClient(basicSettings.hermesApiBaseUrl, {
+    const hermesApiBaseUrl =
+      process.env["PYTH_HERMES_URL"] || basicSettings.hermesApiBaseUrl;
+    const pythApiKey = process.env["PYTH_API_KEY"] || basicSettings.pythApiKey;
+    this.pythConnection = new HermesClient(hermesApiBaseUrl, {
       timeout: 30000,
+      headers: pythApiKey
+        ? { Authorization: `Bearer ${pythApiKey}` }
+        : undefined,
     });
     this._checkWeb3Settings();
     this.provider = MulticallWrapper.wrap(
@@ -107,6 +117,23 @@ export class VaultManager {
 
   private async _getSignerAddress(): Promise<string> {
     return await this.signer.getAddress();
+  }
+
+  // EIP-7702 delegated accounts transactions must be sent sequentially
+  async _is7702Account(override?: boolean): Promise<boolean> {
+    if (override !== undefined) {
+      return override;
+    }
+    if (this.config.is7702Account !== undefined) {
+      return this.config.is7702Account;
+    }
+    if (this.detected7702 === undefined) {
+      const address = await this._getSignerAddress();
+      const code = await this.provider.getCode(address);
+      // EIP-7702 delegation designator
+      this.detected7702 = code.toLowerCase().startsWith("0xef0100");
+    }
+    return this.detected7702;
   }
 
   private async _sendContractTxAndWait(args: {
@@ -293,13 +320,32 @@ export class VaultManager {
     return new ethers.Contract(tokenAddress, IERC20ABI, this.signer);
   }
 
+  private async _getAllowance(
+    token: ethers.Contract,
+    owner: string,
+    spender: string,
+  ): Promise<bigint> {
+    return BigInt(await token.allowance(owner, spender));
+  }
+
   async _approveERC20(token: ethers.Contract, spender: string, amount: string) {
     const signerAddress = await this._getSignerAddress();
+    const requiredAmount = BigInt(amount);
     const balance = await token.balanceOf(signerAddress);
-    if (balance < BigInt(amount)) {
+    if (balance < requiredAmount) {
       const tokenName = await token.name();
       throw new Error(`Insufficient ${tokenName} balance`);
     }
+
+    const currentAllowance = await this._getAllowance(
+      token,
+      signerAddress,
+      spender,
+    );
+    if (currentAllowance >= requiredAmount) {
+      return;
+    }
+
     await this._simulateTransaction(() =>
       token.approve.staticCall(spender, amount),
     );
@@ -312,6 +358,26 @@ export class VaultManager {
       const tokenName = await token.name();
       throw new Error(`ERC20 approve failed for ${tokenName}`);
     }
+
+    // A load balanced RPC endpoint can answer the next call from a node that has
+    // not applied the approval block yet, which makes the following transaction
+    // simulation revert with "transfer amount exceeds allowance".
+    for (let attempt = 1; attempt <= ALLOWANCE_VISIBILITY_ATTEMPTS; attempt++) {
+      const allowance = await this._getAllowance(token, signerAddress, spender);
+      if (allowance >= requiredAmount) {
+        return;
+      }
+      if (attempt < ALLOWANCE_VISIBILITY_ATTEMPTS) {
+        await new Promise((r) =>
+          setTimeout(r, ALLOWANCE_VISIBILITY_INTERVAL_MS),
+        );
+      }
+    }
+
+    const tokenName = await token.name();
+    throw new Error(
+      `${tokenName} allowance for ${spender} is still not visible after approve; the RPC node may be lagging behind`,
+    );
   }
 
   async _getHermesPriceUpdateAtTimestamp(
@@ -428,6 +494,17 @@ export class VaultManager {
   async createVault(createVaultOptions) {
     const isBuyLow = !!createVaultOptions.isBuyLow;
     const useCollateralPool = !!createVaultOptions.useCollateralPool;
+    if (
+      createVaultOptions.is7702Account !== undefined &&
+      createVaultOptions.is7702Account !== "true" &&
+      createVaultOptions.is7702Account !== "false"
+    ) {
+      throw new Error('is7702Account value not valid');
+    }
+    const is7702Override =
+      createVaultOptions.is7702Account === undefined
+        ? undefined
+        : createVaultOptions.is7702Account === "true";
     const tradingPair = createVaultOptions.tradingPair;
     const useNativeToken = !!createVaultOptions.useNativeToken;
     const vaultSeriesVersion = createVaultOptions.vaultSeriesVersion || 1;
@@ -546,18 +623,31 @@ export class VaultManager {
           linkedPriceBN,
         );
 
-      const linkedTokenApproval = this._approveERC20(
-        linkedToken,
-        this.config.factory,
-        linkedTokenAmount.toString(),
-      );
-      const investmentTokenApproval = this._approveERC20(
-        investmentToken,
-        this.config.factory,
-        investmentTokenAmount.toString(),
-      );
-
-      await Promise.all([linkedTokenApproval, investmentTokenApproval]);
+      if (await this._is7702Account(is7702Override)) {
+        await this._approveERC20(
+          linkedToken,
+          this.config.factory,
+          linkedTokenAmount.toString(),
+        );
+        await this._approveERC20(
+          investmentToken,
+          this.config.factory,
+          investmentTokenAmount.toString(),
+        );
+      } else {
+        await Promise.all([
+          this._approveERC20(
+            linkedToken,
+            this.config.factory,
+            linkedTokenAmount.toString(),
+          ),
+          this._approveERC20(
+            investmentToken,
+            this.config.factory,
+            investmentTokenAmount.toString(),
+          ),
+        ]);
+      }
     }
 
     const updateFee = await pythPriceFeed.getUpdateFee(binaryData);
