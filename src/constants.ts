@@ -44,3 +44,18 @@ export const addressOperationDefinitions = [
   { name: "start", alias: "s", type: Number },
   { name: "count", alias: "c", type: Number },
 ];
+
+// ERC-7579 batch execution
+export const ERC7579_EXECUTE_ABI = [
+  "function execute(bytes32 mode, bytes executionCalldata) payable",
+];
+
+// callType 0x01 batch
+export const ERC7579_BATCH_MODE =
+  "0x0100000000000000000000000000000000000000000000000000000000000000";
+
+// UnsupportedCallType / UnsupportedExecType
+export const ERC7579_UNSUPPORTED_ERROR_SELECTORS = [
+  "0xb96fcfe4",
+  "0x1187dc06",
+];

@@ -9,6 +9,7 @@ import {
 import { ethers, EventLog, NonceManager } from "ethers";
 import { VaultManager } from "../src/vault_manager";
 import { BlockchainConfig } from "../src/types";
+import { ERC7579_BATCH_MODE } from "../src/constants";
 import * as utils from "../src/utils";
 
 import FactoryABI from "../abi/Factory.json";
@@ -572,6 +573,350 @@ describe("VaultManager createVault", () => {
       "Custom signer is not supported for vault series version 1",
     );
   });
+
+  test("ignores overflow panic in simulation", async () => {
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(mockContract as unknown as ethers.Contract);
+    (mockContract.createVault as any).staticCall.mockRejectedValueOnce({
+      reason: "Panic due to OVERFLOW(17)",
+    });
+
+    await vaultManager.createVault(mockBuyLowVaultOptions);
+
+    expect((mockContract.createVault as any).staticCall).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(mockContract.createVault).toHaveBeenCalledTimes(1);
+  });
+
+  test("still throws for other simulation errors", async () => {
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(mockContract as unknown as ethers.Contract);
+    (mockContract.createVault as any).staticCall.mockRejectedValueOnce({
+      reason: "revert error",
+    });
+
+    await expect(
+      vaultManager.createVault(mockBuyLowVaultOptions),
+    ).rejects.toEqual({ reason: "revert error" });
+    expect(mockContract.createVault).not.toHaveBeenCalled();
+  });
+});
+
+describe("VaultManager createVault with ERC-7579 batch", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const is7702Config = { ...mockConfig, is7702Account: true };
+  const bigAllowance = 1000000000000000000000000n;
+
+  const buildBatchMocks = (options?: {
+    allowance?: ReturnType<typeof jest.fn>;
+    staticCallError?: Error;
+    receiptLogs?: object[];
+  }) => {
+    const executeWait = jest.fn<() => Promise<object>>().mockResolvedValue({
+      status: 1,
+      logs: options?.receiptLogs ?? [{ topics: [], data: "0x" }],
+    });
+    const executeStaticCall = options?.staticCallError
+      ? jest
+          .fn()
+          .mockImplementation(() => Promise.reject(options.staticCallError))
+      : jest.fn().mockImplementation(() => Promise.resolve());
+    const execute = (() => {
+      const fn = jest.fn().mockReturnValue({ wait: executeWait });
+      (fn as unknown as { staticCall: unknown }).staticCall = executeStaticCall;
+      return fn;
+    })();
+    const approveWait = jest
+      .fn<() => Promise<object>>()
+      .mockResolvedValue({ status: 1 });
+    const createVaultWait = jest.fn<() => Promise<object>>().mockResolvedValue({
+      status: 1,
+      logs: [{ topics: [], data: "0x" }],
+    });
+    const contract = {
+      interface: {
+        parseLog: jest.fn().mockReturnValue({
+          name: "VaultCreated",
+          args: { vaultAddress: "0x1bb4E6ae7719bB9Aa3dDC7c4eA95FDBD4005BAb4" },
+        }),
+      },
+      decimals: jest.fn().mockReturnValue(18),
+      balanceOf: jest.fn().mockReturnValue(900000000000000000000000000n),
+      allowance: options?.allowance ?? jest.fn().mockReturnValue(0n),
+      name: jest.fn().mockReturnValue("ETH"),
+      getUpdateFee: jest.fn().mockReturnValue(1n),
+      getPresetFeeParams: jest.fn().mockReturnValue({
+        tradingFeeRate: 69000000000000000n,
+      }),
+      getTradingFeeTiers: jest
+        .fn()
+        .mockReturnValue([{ minimumVolume: 0n, feeRate: 69000000000000000n }]),
+      approve: (() => {
+        const fn = jest.fn().mockReturnValue({ wait: approveWait });
+        (fn as unknown as { staticCall: unknown }).staticCall = jest
+          .fn()
+          .mockImplementation(() => Promise.resolve());
+        return fn;
+      })(),
+      createVault: (() => {
+        const fn = jest.fn().mockReturnValue({ wait: createVaultWait });
+        (fn as unknown as { staticCall: unknown }).staticCall = jest
+          .fn()
+          .mockImplementation(() => Promise.resolve());
+        return fn;
+      })(),
+      execute,
+    };
+    return { contract, execute, executeStaticCall, approveWait, createVaultWait };
+  };
+
+  const delegatedCode = "0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b";
+
+  const newVaultManager = (onChainCode: string = delegatedCode) => {
+    const vaultManager = new VaultManager(is7702Config, mockBasicSettings);
+    jest
+      .spyOn(vaultManager.provider, "getCode")
+      .mockResolvedValue(onChainCode);
+    jest
+      .spyOn(vaultManager.pythConnection, "getLatestPriceUpdates")
+      .mockResolvedValue({
+        binary: { encoding: "hex", data: [mockHexData] },
+        parsed: mockedParsedData,
+      });
+    return vaultManager;
+  };
+
+  const decodeBatchCalls = (executionCalldata: string) => {
+    const [calls] = ethers.AbiCoder.defaultAbiCoder().decode(
+      ["tuple(address target, uint256 value, bytes callData)[]"],
+      executionCalldata,
+    );
+    return calls;
+  };
+
+  test("batches approve + approve + createVault into a single transaction", async () => {
+    const { contract, execute, approveWait } = buildBatchMocks();
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(contract as unknown as ethers.Contract);
+
+    const vaultManager = newVaultManager();
+    await vaultManager.createVault(mockBuyLowVaultOptions);
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(contract.approve).not.toHaveBeenCalled();
+    expect(approveWait).not.toHaveBeenCalled();
+    expect(contract.createVault).not.toHaveBeenCalled();
+
+    const [mode, executionCalldata] = execute.mock.calls[0] as [
+      string,
+      string,
+      object,
+    ];
+    expect(mode).toBe(ERC7579_BATCH_MODE);
+    const calls = decodeBatchCalls(executionCalldata);
+    expect(calls.length).toBe(3);
+    expect(calls[0].target).toBe(tradingPairConfig.baseToken);
+    expect(calls[1].target).toBe(tradingPairConfig.quoteToken);
+    expect(calls[2].target).toBe(mockConfig.factory);
+    expect(calls[2].value).toBe(1n);
+  });
+
+  test("skips approve calls whose allowance is already sufficient", async () => {
+    const allowance = jest
+      .fn()
+      .mockReturnValueOnce(bigAllowance) // linked token is covered
+      .mockReturnValue(0n); // investment token needs approve
+    const { contract, execute } = buildBatchMocks({ allowance });
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(contract as unknown as ethers.Contract);
+
+    const vaultManager = newVaultManager();
+    await vaultManager.createVault(mockBuyLowVaultOptions);
+
+    const calls = decodeBatchCalls(execute.mock.calls[0][1] as string);
+    expect(calls.length).toBe(2);
+    // Buy low: linked = baseToken (skipped), investment = quoteToken
+    expect(calls[0].target).toBe(tradingPairConfig.quoteToken);
+    expect(calls[1].target).toBe(mockConfig.factory);
+  });
+
+  test("falls back to the sequential path on an empty revert", async () => {
+    const staticCallError = Object.assign(new Error("execution reverted"), {
+      code: "CALL_EXCEPTION",
+      data: "0x",
+    });
+    // allowance order: batch builder twice, then per-approve check + visibility
+    const allowance = jest
+      .fn()
+      .mockReturnValueOnce(0n)
+      .mockReturnValueOnce(0n)
+      .mockReturnValueOnce(0n)
+      .mockReturnValueOnce(bigAllowance)
+      .mockReturnValueOnce(0n)
+      .mockReturnValue(bigAllowance);
+    const { contract, execute, approveWait, createVaultWait } = buildBatchMocks(
+      { allowance, staticCallError },
+    );
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(contract as unknown as ethers.Contract);
+
+    const vaultManager = newVaultManager();
+    await vaultManager.createVault(mockBuyLowVaultOptions);
+
+    // batch tx is never sent
+    expect(execute).not.toHaveBeenCalled();
+    expect(approveWait).toHaveBeenCalledTimes(2);
+    expect(contract.createVault).toHaveBeenCalledTimes(1);
+    expect(createVaultWait).toHaveBeenCalledTimes(1);
+  });
+
+  test("throws business errors from batch simulation without falling back", async () => {
+    const staticCallError = Object.assign(new Error("execution reverted"), {
+      code: "CALL_EXCEPTION",
+      data: "0x2acbe915", // custom error
+    });
+    const { contract, execute, approveWait } = buildBatchMocks({
+      staticCallError,
+    });
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(contract as unknown as ethers.Contract);
+
+    const vaultManager = newVaultManager();
+    await expect(
+      vaultManager.createVault(mockBuyLowVaultOptions),
+    ).rejects.toThrow("execution reverted");
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(approveWait).not.toHaveBeenCalled();
+    expect(contract.createVault).not.toHaveBeenCalled();
+  });
+
+  test("throws when the batch tx mined without a VaultCreated event", async () => {
+    const { contract, execute, approveWait } = buildBatchMocks({
+      receiptLogs: [],
+    });
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(contract as unknown as ethers.Contract);
+
+    const vaultManager = newVaultManager();
+    await expect(
+      vaultManager.createVault(mockBuyLowVaultOptions),
+    ).rejects.toThrow("Vault creation event not found");
+
+    // Never retry with the sequential path after a mined batch tx
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(approveWait).not.toHaveBeenCalled();
+    expect(contract.createVault).not.toHaveBeenCalled();
+  });
+
+  test("treats the account as a regular EOA when the 7702 claim is not on-chain", async () => {
+    const allowance = jest
+      .fn()
+      .mockReturnValueOnce(0n) // linked token needs approve
+      .mockReturnValueOnce(0n) // investment token needs approve
+      .mockReturnValue(bigAllowance); // visibility polls succeed
+    const { contract, execute, executeStaticCall, approveWait, createVaultWait } =
+      buildBatchMocks({ allowance });
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(contract as unknown as ethers.Contract);
+
+    const vaultManager = newVaultManager("0x"); // no delegation on-chain
+    await vaultManager.createVault(mockBuyLowVaultOptions);
+
+    expect(executeStaticCall).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(approveWait).toHaveBeenCalledTimes(2);
+    expect(contract.createVault).toHaveBeenCalledTimes(1);
+    expect(createVaultWait).toHaveBeenCalledTimes(1);
+  });
+
+  test("retries sequentially when concurrent approvals hit the in-flight limit", async () => {
+    const inflightError = new Error(
+      'could not coalesce error (error={ "code": -32000, "message": "in-flight transaction limit reached for delegated accounts" })',
+    );
+    const allowance = jest
+      .fn()
+      .mockReturnValueOnce(0n) // linked builder needs approve
+      .mockReturnValueOnce(0n) // investment builder needs approve
+      .mockReturnValueOnce(bigAllowance) // linked visibility poll
+      .mockReturnValueOnce(bigAllowance) // retry linked builder skips
+      .mockReturnValueOnce(0n) // retry investment builder approves
+      .mockReturnValue(bigAllowance); // retry investment visibility poll
+    const { contract, execute, approveWait, createVaultWait } = buildBatchMocks(
+      { allowance },
+    );
+    let approveSendCount = 0;
+    const approveFn = jest.fn().mockImplementation(() => {
+      approveSendCount += 1;
+      if (approveSendCount === 2) {
+        throw inflightError;
+      }
+      return { wait: approveWait };
+    });
+    (approveFn as unknown as { staticCall: unknown }).staticCall = jest
+      .fn()
+      .mockImplementation(() => Promise.resolve());
+    (contract as { approve: unknown }).approve = approveFn;
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(contract as unknown as ethers.Contract);
+
+    // mockConfig has is7702Account: false, so the concurrent path is taken
+    const vaultManager = new VaultManager(mockConfig, mockBasicSettings);
+    jest
+      .spyOn(vaultManager.pythConnection, "getLatestPriceUpdates")
+      .mockResolvedValue({
+        binary: { encoding: "hex", data: [mockHexData] },
+        parsed: mockedParsedData,
+      });
+    const nonceResetSpy = jest.spyOn(mockSigner, "reset");
+
+    await vaultManager.createVault(mockBuyLowVaultOptions);
+
+    expect(execute).not.toHaveBeenCalled();
+    // concurrent: 1 ok + 1 rejected; retry: 1
+    expect(approveFn).toHaveBeenCalledTimes(3);
+    expect(approveWait).toHaveBeenCalledTimes(2);
+    expect(contract.createVault).toHaveBeenCalledTimes(1);
+    expect(createVaultWait).toHaveBeenCalledTimes(1);
+    expect(nonceResetSpy).toHaveBeenCalled();
+  });
+
+  test("relayer mode does not attempt batch execution", async () => {
+    const originalEnv = process.env;
+    process.env = {
+      ...originalEnv,
+      OZ_RELAYER_URL: "https://relayer.example/",
+      OZ_RELAYER_API_KEY: "test-api-key",
+      OZ_RELAYER_ID: "relayer-1",
+    };
+    try {
+      const vaultManager = new VaultManager(is7702Config, mockBasicSettings);
+      const result = await (
+        vaultManager as unknown as {
+          _tryExecuteBatch: (
+            calls: object[],
+            value: bigint,
+          ) => Promise<{ status: string }>;
+        }
+      )._tryExecuteBatch([], 0n);
+      expect(result).toEqual({ status: "unsupported" });
+    } finally {
+      process.env = originalEnv;
+    }
+  });
 });
 
 describe("VaultManager _is7702Account", () => {
@@ -808,6 +1153,60 @@ describe("VaultManager subscribeVault", () => {
     );
 
     expect(mockApproveWait).toHaveBeenCalledTimes(1);
+    expect(mockDepositWait).toHaveBeenCalledTimes(1);
+  });
+
+  test("ignores overflow panic in deposit simulation", async () => {
+    const mockDepositWait = jest
+      .fn<() => Promise<object>>()
+      .mockResolvedValue({ status: 1 });
+
+    const mockContract = {
+      investmentToken: jest.fn().mockReturnValue(tradingPairConfig.quoteToken),
+      linkedToken: jest.fn().mockReturnValue(tradingPairConfig.baseToken),
+      decimals: jest.fn().mockReturnValue(6),
+      deposit: (() => {
+        const fn = jest.fn().mockReturnValue({
+          wait: mockDepositWait,
+        });
+        (fn as any).staticCall = jest
+          .fn()
+          .mockImplementation(() =>
+            Promise.reject({ reason: "Panic due to OVERFLOW(17)" }),
+          );
+        return fn;
+      })(),
+      balanceOf: jest.fn().mockReturnValue(9000000000000000n),
+      allowance: jest.fn().mockReturnValue(1000000000000000000000000n),
+      name: jest.fn().mockReturnValue("ETH"),
+      isBuyLow: jest.fn().mockReturnValue(true),
+      symbol: jest.fn().mockReturnValueOnce("WETH").mockReturnValueOnce("USDC"),
+      getUpdateFee: jest.fn().mockReturnValue(1n),
+    };
+
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(mockContract as unknown as ethers.Contract);
+    jest
+      .spyOn(vaultManager.pythConnection, "getLatestPriceUpdates")
+      .mockResolvedValue({
+        binary: {
+          encoding: "hex",
+          data: [mockHexData],
+        },
+        parsed: mockedParsedData,
+      });
+
+    await vaultManager.subscribeVault(mockVaultAddress, "1");
+
+    expect((mockContract.deposit as any).staticCall).toHaveBeenCalledTimes(1);
+    expect(mockContract.deposit).toHaveBeenCalledWith(
+      mockVaultAddress,
+      "1000000",
+      0,
+      [Buffer.from(mockHexData, "hex")],
+      { value: 1n },
+    );
     expect(mockDepositWait).toHaveBeenCalledTimes(1);
   });
 

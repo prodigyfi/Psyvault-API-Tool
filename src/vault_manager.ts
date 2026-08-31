@@ -27,8 +27,16 @@ import CollateralPoolABI from "../abi/CollateralPool.json";
 import CollateralPoolV2ABI from "../abi/CollateralPoolV2.json";
 import VaultBatchManagerABI from "../abi/VaultBatchManager.json";
 import { isOzRelayerEnabled, OzRelayerClient } from "./oz_relayer_client";
+import {
+  ERC7579_EXECUTE_ABI,
+  ERC7579_BATCH_MODE,
+  ERC7579_UNSUPPORTED_ERROR_SELECTORS,
+} from "./constants";
 
 const DEFAULT_VAULT_FETCH_COUNT = 100;
+
+const erc20Interface = new ethers.Interface(IERC20ABI);
+const factoryInterface = new ethers.Interface(FactoryABI);
 
 const ALLOWANCE_VISIBILITY_ATTEMPTS = 10;
 const ALLOWANCE_VISIBILITY_INTERVAL_MS = 1_000;
@@ -44,6 +52,16 @@ type SubscribeVaultSignatureOptions = {
   nonce?: string;
   deadline?: string;
 };
+
+type Erc7579Call = {
+  target: string;
+  value: bigint;
+  data: string;
+};
+
+type BatchExecutionResult =
+  | { status: "sent"; receipt: ContractTransactionReceipt }
+  | { status: "unsupported" };
 
 export class VaultManager {
   config: BlockchainConfig;
@@ -120,6 +138,35 @@ export class VaultManager {
   }
 
   // EIP-7702 delegated accounts transactions must be sent sequentially
+  // Cached if the account has EIP-7702 delegation on-chain
+  private async _detectDelegationOnChain(): Promise<boolean> {
+    if (this.detected7702 === undefined) {
+      const address = await this._getSignerAddress();
+      const code = await this.provider.getCode(address);
+      this.detected7702 = code.toLowerCase().startsWith("0xef0100");
+    }
+    return this.detected7702;
+  }
+
+  // The error for EIP-7702 accounts that already have a pending transaction
+  private _isInflightLimitError(error: unknown): boolean {
+    const err = error as {
+      message?: string;
+      info?: { error?: { message?: string } };
+      error?: { message?: string };
+    };
+    const messages = [
+      err?.message,
+      err?.info?.error?.message,
+      err?.error?.message,
+    ];
+    return messages.some(
+      (message) =>
+        typeof message === "string" &&
+        message.toLowerCase().includes("in-flight transaction limit"),
+    );
+  }
+
   async _is7702Account(override?: boolean): Promise<boolean> {
     if (override !== undefined) {
       return override;
@@ -127,13 +174,83 @@ export class VaultManager {
     if (this.config.is7702Account !== undefined) {
       return this.config.is7702Account;
     }
-    if (this.detected7702 === undefined) {
-      const address = await this._getSignerAddress();
-      const code = await this.provider.getCode(address);
-      // EIP-7702 delegation designator
-      this.detected7702 = code.toLowerCase().startsWith("0xef0100");
+    return this._detectDelegationOnChain();
+  }
+
+  // Try to execute the calls
+  private async _tryExecuteBatch(
+    calls: Erc7579Call[],
+    totalValue: bigint,
+  ): Promise<BatchExecutionResult> {
+    if (this._isRelayerMode()) {
+      return { status: "unsupported" };
     }
-    return this.detected7702;
+
+    const ownAddress = await this._getSignerAddress();
+
+    // Verify the delegation on-chain before batching
+    if (!(await this._detectDelegationOnChain())) {
+      return { status: "unsupported" };
+    }
+
+    // Merge error fragments in nested errors
+    const account = new ethers.Contract(
+      ownAddress,
+      [
+        ...ERC7579_EXECUTE_ABI,
+        ...FactoryABI.filter((fragment) => fragment.type === "error"),
+        ...IERC20ABI.filter((fragment) => fragment.type === "error"),
+      ],
+      this.signer,
+    );
+    const executionCalldata = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["tuple(address target, uint256 value, bytes callData)[]"],
+      [calls.map((call) => [call.target, call.value, call.data])],
+    );
+
+    try {
+      await this._simulateTransaction(
+        () =>
+          account.execute.staticCall(ERC7579_BATCH_MODE, executionCalldata, {
+            value: totalValue,
+            gasLimit: 3500000,
+          }),
+        { ignoreOverflow: true },
+      );
+    } catch (error) {
+      if (this._isBatchUnsupportedError(error)) {
+        console.log(
+          "Delegated contract does not support ERC-7579 batch execution, falling back",
+        );
+        return { status: "unsupported" };
+      }
+      throw error;
+    }
+
+    const receipt = await this._sendContractTxAndWait({
+      contract: account,
+      functionName: "execute",
+      functionArgs: [ERC7579_BATCH_MODE, executionCalldata],
+      overrides: {
+        value: totalValue,
+        gasLimit: 3500000,
+      },
+    });
+    return { status: "sent", receipt };
+  }
+
+  // Check if the error is an unsupported batch execution error
+  private _isBatchUnsupportedError(error: unknown): boolean {
+    const err = error as { code?: string; data?: string | null };
+    if (err.code !== "CALL_EXCEPTION") {
+      return false;
+    }
+    if (!err.data || err.data === "0x") {
+      return true;
+    }
+    return ERC7579_UNSUPPORTED_ERROR_SELECTORS.includes(
+      err.data.slice(0, 10).toLowerCase(),
+    );
   }
 
   private async _sendContractTxAndWait(args: {
@@ -272,6 +389,7 @@ export class VaultManager {
 
   private async _simulateTransaction(
     contractMethod: () => Promise<unknown>,
+    options: { ignoreOverflow?: boolean } = {},
   ): Promise<void> {
     // Disable multicall for staticCall to avoid parsing issues with custom errors
     const originalMulticallState = this.provider.isMulticallEnabled;
@@ -281,12 +399,18 @@ export class VaultManager {
       await contractMethod();
       console.log(`Transaction simulation passed`);
     } catch (simulationError: unknown) {
-      console.error(`Transaction simulation failed`);
       const error = simulationError as {
         reason?: string;
         message?: string;
         data?: string;
       };
+      if (
+        options.ignoreOverflow &&
+        error?.reason === "Panic due to OVERFLOW(17)"
+      ) {
+        return;
+      }
+      console.error(`Transaction simulation failed`);
       console.error("Revert reason:", error.reason || error.message);
       if (error.data) {
         console.error("Error data:", error.data);
@@ -328,7 +452,13 @@ export class VaultManager {
     return BigInt(await token.allowance(owner, spender));
   }
 
-  async _approveERC20(token: ethers.Contract, spender: string, amount: string) {
+  // Check allowance and build the approve call
+  private async _buildApproveCallIfNeeded(
+    token: ethers.Contract,
+    tokenAddress: string,
+    spender: string,
+    amount: string,
+  ): Promise<Erc7579Call | null> {
     const signerAddress = await this._getSignerAddress();
     const requiredAmount = BigInt(amount);
     const balance = await token.balanceOf(signerAddress);
@@ -343,8 +473,28 @@ export class VaultManager {
       spender,
     );
     if (currentAllowance >= requiredAmount) {
+      return null;
+    }
+
+    return {
+      target: tokenAddress,
+      value: 0n,
+      data: erc20Interface.encodeFunctionData("approve", [spender, amount]),
+    };
+  }
+
+  async _approveERC20(token: ethers.Contract, spender: string, amount: string) {
+    const approveCall = await this._buildApproveCallIfNeeded(
+      token,
+      token.target as string,
+      spender,
+      amount,
+    );
+    if (!approveCall) {
       return;
     }
+    const signerAddress = await this._getSignerAddress();
+    const requiredAmount = BigInt(amount);
 
     await this._simulateTransaction(() =>
       token.approve.staticCall(spender, amount),
@@ -491,6 +641,32 @@ export class VaultManager {
       : BigInt(ub.investmentTokenYield) + BigInt(ub.principal);
   }
 
+  // Extract the created vault address from the receipt logs
+  private _parseVaultCreated(
+    receipt: ContractTransactionReceipt,
+    factory: ethers.Contract,
+  ): string {
+    let parsedLog = null;
+    for (const log of receipt.logs) {
+      try {
+        const parsed = factory.interface.parseLog({
+          topics: log.topics as string[],
+          data: log.data,
+        });
+        if (parsed && parsed.name === "VaultCreated") {
+          parsedLog = parsed;
+          break;
+        }
+      } catch {
+        // Not a matching event, continue
+      }
+    }
+    if (!parsedLog) {
+      throw new Error("Vault creation event not found");
+    }
+    return parsedLog.args.vaultAddress;
+  }
+
   async createVault(createVaultOptions) {
     const isBuyLow = !!createVaultOptions.isBuyLow;
     const useCollateralPool = !!createVaultOptions.useCollateralPool;
@@ -529,6 +705,10 @@ export class VaultManager {
     const quoteToken = await this._getToken(quoteTokenAddress);
     const linkedToken = isBuyLow ? baseToken : quoteToken;
     const investmentToken = isBuyLow ? quoteToken : baseToken;
+    const linkedTokenAddress = isBuyLow ? baseTokenAddress : quoteTokenAddress;
+    const investmentTokenAddress = isBuyLow
+      ? quoteTokenAddress
+      : baseTokenAddress;
 
     this.provider.isMulticallEnabled = true;
     const [baseTokenDecimals, quoteTokenDecimals] = await Promise.all([
@@ -611,6 +791,10 @@ export class VaultManager {
       linkedPriceDecimals,
     );
 
+    const updateFee = await pythPriceFeed.getUpdateFee(binaryData);
+
+    let result: ContractTransactionReceipt | null = null;
+
     // Approve spending
     if (!useCollateralPool) {
       const { linkedTokenAmount, investmentTokenAmount } =
@@ -623,7 +807,7 @@ export class VaultManager {
           linkedPriceBN,
         );
 
-      if (await this._is7702Account(is7702Override)) {
+      const approveSequentially = async () => {
         await this._approveERC20(
           linkedToken,
           this.config.factory,
@@ -634,8 +818,60 @@ export class VaultManager {
           this.config.factory,
           investmentTokenAmount.toString(),
         );
+      };
+
+      let use7702 = await this._is7702Account(is7702Override);
+      // Check if the account has EIP-7702 delegation
+      if (use7702 && !this._isRelayerMode()) {
+        const delegated = await this._detectDelegationOnChain();
+        if (!delegated) {
+          console.log(
+            "Account has no EIP-7702 delegation on-chain",
+          );
+          use7702 = false;
+        }
+      }
+
+      if (use7702) {
+        const approveCalls = (
+          await Promise.all([
+            this._buildApproveCallIfNeeded(
+              linkedToken,
+              linkedTokenAddress,
+              this.config.factory,
+              linkedTokenAmount.toString(),
+            ),
+            this._buildApproveCallIfNeeded(
+              investmentToken,
+              investmentTokenAddress,
+              this.config.factory,
+              investmentTokenAmount.toString(),
+            ),
+          ])
+        ).filter((call): call is Erc7579Call => call !== null);
+
+        const batch = await this._tryExecuteBatch(
+          [
+            ...approveCalls,
+            {
+              target: this.config.factory,
+              value: BigInt(updateFee),
+              data: factoryInterface.encodeFunctionData("createVault", [
+                vaultParams,
+                binaryData,
+              ]),
+            },
+          ],
+          BigInt(updateFee),
+        );
+        if (batch.status === "sent") {
+          result = batch.receipt;
+        } else {
+          // Approve sequentially if not support batch
+          await approveSequentially();
+        }
       } else {
-        await Promise.all([
+        const approvals = await Promise.allSettled([
           this._approveERC20(
             linkedToken,
             this.config.factory,
@@ -647,20 +883,41 @@ export class VaultManager {
             investmentTokenAmount.toString(),
           ),
         ]);
+        const failures = approvals.filter(
+          (approval): approval is PromiseRejectedResult =>
+            approval.status === "rejected",
+        );
+        if (failures.length > 0) {
+          if (
+            !failures.some((failure) =>
+              this._isInflightLimitError(failure.reason),
+            )
+          ) {
+            throw failures[0].reason;
+          }
+          console.warn(
+            "Concurrent approvals failed, please check the is7702Account setting; retrying sequentially.",
+          );
+          // Reset the nonce manager
+          if (this.signer instanceof NonceManager) {
+            this.signer.reset();
+          }
+          await approveSequentially();
+        }
       }
     }
 
-    const updateFee = await pythPriceFeed.getUpdateFee(binaryData);
+    if (!result) {
+      await this._simulateTransaction(
+        () =>
+          factory.createVault.staticCall(vaultParams, binaryData, {
+            value: updateFee,
+            gasLimit: 3000000,
+          }),
+        { ignoreOverflow: true },
+      );
 
-    await this._simulateTransaction(() =>
-      factory.createVault.staticCall(vaultParams, binaryData, {
-        value: updateFee,
-        gasLimit: 3000000,
-      }),
-    );
-
-    const result: ContractTransactionReceipt =
-      await this._sendContractTxAndWait({
+      result = await this._sendContractTxAndWait({
         contract: factory,
         functionName: "createVault",
         functionArgs: [vaultParams, binaryData],
@@ -669,30 +926,12 @@ export class VaultManager {
           gasLimit: 3000000,
         },
       });
+    }
 
     // Get vault address from event logs
     if (result.status == 1) {
+      const vaultAddress = this._parseVaultCreated(result, factory);
       console.log("Vault created successfully");
-
-      let parsedLog = null;
-      for (const log of result.logs) {
-        try {
-          const parsed = factory.interface.parseLog({
-            topics: log.topics as string[],
-            data: log.data,
-          });
-          if (parsed && parsed.name === "VaultCreated") {
-            parsedLog = parsed;
-            break;
-          }
-        } catch {
-          // Not a matching event, continue
-        }
-      }
-      if (!parsedLog) {
-        throw new Error("Vault creation event not found");
-      }
-      const vaultAddress = parsedLog.args.vaultAddress;
       console.log(`Vault address: ${vaultAddress}`);
 
       if (useCollateralPool && vaultSeriesVersion === 1) {
@@ -1040,18 +1279,20 @@ export class VaultManager {
       );
 
       if (signedDeposit) {
-        await this._simulateTransaction(() =>
-          router.deposit.staticCall(
-            vaultAddress,
-            subscribeAmount,
-            signedYieldValue,
-            nonce,
-            deadline,
-            signature,
-            minYieldValue,
-            binaryData,
-            { value: updateFee },
-          ),
+        await this._simulateTransaction(
+          () =>
+            router.deposit.staticCall(
+              vaultAddress,
+              subscribeAmount,
+              signedYieldValue,
+              nonce,
+              deadline,
+              signature,
+              minYieldValue,
+              binaryData,
+              { value: updateFee },
+            ),
+          { ignoreOverflow: true },
         );
 
         const result = await this._sendContractTxAndWait({
@@ -1078,14 +1319,16 @@ export class VaultManager {
         return;
       }
 
-      await this._simulateTransaction(() =>
-        router.deposit.staticCall(
-          vaultAddress,
-          subscribeAmount,
-          minYieldValue,
-          binaryData,
-          { value: updateFee },
-        ),
+      await this._simulateTransaction(
+        () =>
+          router.deposit.staticCall(
+            vaultAddress,
+            subscribeAmount,
+            minYieldValue,
+            binaryData,
+            { value: updateFee },
+          ),
+        { ignoreOverflow: true },
       );
 
       const result = await this._sendContractTxAndWait({

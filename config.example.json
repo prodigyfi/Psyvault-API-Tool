@@ -124,7 +124,7 @@
         }
       },
       "AIXBT-USDC": {
-        "baseToken": "0x4f9fd6be4a90f2620860d680c0d4d5fb53d1a825",
+        "baseToken": "0x4F9Fd6Be4a90f2620860d680c0d4d5Fb53d1A825",
         "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         "priceFeed": {
           "type": "PYTH",
@@ -133,7 +133,7 @@
         }
       },
       "KAITO-USDC": {
-        "baseToken": "0x98d0baa52b2d063e780de12f615f963fe8537553",
+        "baseToken": "0x98d0baa52b2D063E780DE12F615f963Fe8537553",
         "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
         "priceFeed": {
           "type": "PYTH",
@@ -237,6 +237,15 @@
           "id": "0x8132e3eb1dac3e56939a16ff83848d194345f6688bff97eb1c8bd462d558802b",
           "decimals": "8"
         }
+      },
+      "cbBTC-USDC": {
+        "baseToken": "0xA73E5977CB60D6f04F1F5265CA93EF678E33D83B",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+          "decimals": "8"
+        }
       }
     }
   },
@@ -270,6 +279,24 @@
           "type": "PYTH",
           "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
           "decimals": "8"
+        }
+      },
+      "XAUT-USDC": {
+        "baseToken": "0x68749665FF8D2D112Fa859AA293F07A622782F38",
+        "quoteToken": "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67",
+          "decimals": "6"
+        }
+      },
+      "NVDAX-USDC": {
+        "baseToken": "0xc845b2894dBddd03858fd2D643B4eF725fE0849d",
+        "quoteToken": "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x4244d07890e4610f46bbde67de8f43a4bf8b569eebe904f136b469f148503b7f",
+          "decimals": "18"
         }
       }
     }
@@ -359,6 +386,24 @@
           "id": "0x8132e3eb1dac3e56939a16ff83848d194345f6688bff97eb1c8bd462d558802b",
           "decimals": "8"
         }
+      },
+      "XAUT-USDC": {
+        "baseToken": "0x6A6f0204311965dC7B93250a4f53f192fd8f37AF",
+        "quoteToken": "0xf90c543e3D217887998b2178Db8D459dA768F394",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67",
+          "decimals": "6"
+        }
+      },
+      "NVDAX-USDC": {
+        "baseToken": "0x5a75FfC52B4627C465D9eaA654116B9020A00970",
+        "quoteToken": "0xf90c543e3D217887998b2178Db8D459dA768F394",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x4244d07890e4610f46bbde67de8f43a4bf8b569eebe904f136b469f148503b7f",
+          "decimals": "18"
+        }
       }
     }
   },
@@ -372,7 +417,7 @@
     "router": "0xc29D4eb234145BF009C28b0cD89C75b9072EA125",
     "vaultBatchManager": "0x4e2d71834D755417fE6ADC4a2F621Fd87e01df26",
     "pythAggregator": "0xC87bcAAF7B0Af30056e068DCa5b5358BD940451F",
-    "pythPriceFeed": "0xe9d69CdD6Fe41e7B621B4A688C5D1a68cB5c8ADc",
+    "pythPriceFeed": "0x298B2f0ae8Efa7f90D845da02ef2E3a88A9BbC02",
     "collateralPool": "0xf2d3A7B4e093A9529a92888f3A6841f5cA5c2a02",
     "collateralPoolV2": "0xD7423A77de707351A47F8fa270c0a3AbA32a90bE",
     "tradingPairs": {
