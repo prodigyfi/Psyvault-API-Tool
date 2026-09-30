@@ -3,6 +3,207 @@
     "hermesApiBaseUrl": "https://pyth.dourolabs.app/hermes/",
     "pythApiKey": "YOUR_PYTH_API_KEY"
   },
+  "Ethereum Mainnet": {
+    "rpcNode": "https://ethereum-rpc.publicnode.com",
+    "account": "lp_account",
+    "is7702Account": false,
+    "jsonWallet": "keystore/wallet.json",
+    "passphrase": "passphrase",
+    "factory": "0x50aB3FE7d089c4F0dD8096aAeA9578f8E7B18AF7",
+    "router": "0xc770C5657B285d97A10579242a77e4BE1d803455",
+    "vaultBatchManager": "0x6558e8Cfef372646bE029698412A9EDBbB71538b",
+    "pythAggregator": "0xcA4d4D67B90C7eAc78dB552C24C5E9C3B124A476",
+    "pythPriceFeed": "0x14b9932cc9AC8Ee03301665a8644A753f46D8552",
+    "collateralPool": "0x864cd49392a4348b5da5337623d994151610D0a3",
+    "collateralPoolV2": "0xe1303B2514755A72da4AcA9B917d96F16c842c80",
+    "tradingPairs": {
+      "WBTC-USDC": {
+        "baseToken": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "quoteToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+          "decimals": "8"
+        }
+      },
+      "WETH-USDC": {
+        "baseToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "quoteToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+          "decimals": "8"
+        }
+      },
+      "XAUT-USDC": {
+        "baseToken": "0x68749665FF8D2d112Fa859AA293F07A622782F38",
+        "quoteToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67",
+          "decimals": "8"
+        }
+      },
+      "NVDAX-USDC": {
+        "baseToken": "0xc845b2894dBddd03858fd2D643B4eF725fE0849d",
+        "quoteToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x4244d07890e4610f46bbde67de8f43a4bf8b569eebe904f136b469f148503b7f",
+          "decimals": "8"
+        }
+      }
+    }
+  },
+  "Base Mainnet": {
+    "rpcNode": "https://base-rpc.publicnode.com",
+    "account": "lp_account",
+    "is7702Account": false,
+    "jsonWallet": "keystore/wallet.json",
+    "passphrase": "passphrase",
+    "factory": "0x50aB3FE7d089c4F0dD8096aAeA9578f8E7B18AF7",
+    "router": "0xc770C5657B285d97A10579242a77e4BE1d803455",
+    "vaultBatchManager": "0x6558e8Cfef372646bE029698412A9EDBbB71538b",
+    "pythAggregator": "0xcA4d4D67B90C7eAc78dB552C24C5E9C3B124A476",
+    "pythPriceFeed": "0xbC16aee60f64864882BC6C4E428e148Fc0E272F5",
+    "collateralPool": "0x864cd49392a4348b5da5337623d994151610D0a3",
+    "collateralPoolV2": "0xe1303B2514755A72da4AcA9B917d96F16c842c80",
+    "tradingPairs": {
+      "cbBTC-USDC": {
+        "baseToken": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+          "decimals": "8"
+        }
+      },
+      "WETH-USDC": {
+        "baseToken": "0x4200000000000000000000000000000000000006",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+          "decimals": "8"
+        }
+      },
+      "LINK-USDC": {
+        "baseToken": "0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",
+          "decimals": "8"
+        }
+      },
+      "AAVE-USDC": {
+        "baseToken": "0x63706e401c06ac8513145b7687A14804d17f814b",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x2b9ab1e972a281585084148ba1389800799bd4be63b957507db1349314e47445",
+          "decimals": "8"
+        }
+      },
+      "AERO-USDC": {
+        "baseToken": "0x940181a94A35A4569E4529A3CDfB74e38FD98631",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x9db37f4d5654aad3e37e2e14ffd8d53265fb3026d1d8f91146539eebaa2ef45f",
+          "decimals": "8"
+        }
+      },
+      "CRV-USDC": {
+        "baseToken": "0x8Ee73c484A26e0A5df2Ee2a4960B789967dd0415",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xa19d04ac696c7a6616d291c7e5d1377cc8be437c327b75adb5dc1bad745fcae8",
+          "decimals": "8"
+        }
+      },
+      "VIRTUAL-USDC": {
+        "baseToken": "0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x8132e3eb1dac3e56939a16ff83848d194345f6688bff97eb1c8bd462d558802b",
+          "decimals": "8"
+        }
+      },
+      "PENDLE-USDC": {
+        "baseToken": "0xA99F6e6785Da0F5d6fB42495Fe424BCE029Eeb3E",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x9a4df90b25497f66b1afb012467e316e801ca3d839456db028892fe8c70c8016",
+          "decimals": "8"
+        }
+      },
+      "KAITO-USDC": {
+        "baseToken": "0x98d0baa52b2D063E780DE12F615f963Fe8537553",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x7302dee641a08507c297a7b0c8b3efa74a48a3baa6c040acab1e5209692b7e59",
+          "decimals": "8"
+        }
+      },
+      "AIXBT-USDC": {
+        "baseToken": "0x4F9Fd6Be4a90f2620860d680c0d4d5Fb53d1A825",
+        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x0fc54579a29ba60a08fdb5c28348f22fd3bec18e221dd6b90369950db638a5a7",
+          "decimals": "8"
+        }
+      }
+    }
+  },
+  "HyperEVM Mainnet": {
+    "rpcNode": "https://rpc.hyperliquid.xyz/evm",
+    "account": "lp_account",
+    "is7702Account": false,
+    "jsonWallet": "keystore/wallet.json",
+    "passphrase": "passphrase",
+    "factory": "0x50aB3FE7d089c4F0dD8096aAeA9578f8E7B18AF7",
+    "router": "0xc770C5657B285d97A10579242a77e4BE1d803455",
+    "vaultBatchManager": "0x6558e8Cfef372646bE029698412A9EDBbB71538b",
+    "pythAggregator": "0xcA4d4D67B90C7eAc78dB552C24C5E9C3B124A476",
+    "pythPriceFeed": "0x298B2f0ae8Efa7f90D845da02ef2E3a88A9BbC02",
+    "collateralPool": "0x864cd49392a4348b5da5337623d994151610D0a3",
+    "collateralPoolV2": "0xe1303B2514755A72da4AcA9B917d96F16c842c80",
+    "tradingPairs": {
+      "UBTC-USDC": {
+        "baseToken": "0x9FDBdA0A5e284c32744D2f17Ee5c74B284993463",
+        "quoteToken": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+          "decimals": "8"
+        }
+      },
+      "UETH-USDC": {
+        "baseToken": "0xBe6727B535545C67d5cAa73dEa54865B92CF7907",
+        "quoteToken": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+          "decimals": "8"
+        }
+      },
+      "WHYPE-USDC": {
+        "baseToken": "0x5555555555555555555555555555555555555555",
+        "quoteToken": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x4279e31cc369bbcc2faf022b382b080e32a8e689ff20fbc530d2a603eb6cd98b",
+          "decimals": "8"
+        }
+      }
+    }
+  },
   "Bera Mainnet": {
     "rpcNode": "https://berachain-rpc.publicnode.com",
     "account": "lp_account",
@@ -10,9 +211,9 @@
     "jsonWallet": "keystore/wallet.json",
     "passphrase": "passphrase",
     "factory": "0x50aB3FE7d089c4F0dD8096aAeA9578f8E7B18AF7",
-    "router": "0xe67447e82d0b0ee124c8ecfa442f00811bcc5d0b",
-    "vaultBatchManager": "0x39Fa3B95B74aB1E66a87D1dc70dA1f6725B49965",
-    "pythAggregator": "0xc29d4eb234145bf009c28b0cd89c75b9072ea125",
+    "router": "0xc770C5657B285d97A10579242a77e4BE1d803455",
+    "vaultBatchManager": "0x6558e8Cfef372646bE029698412A9EDBbB71538b",
+    "pythAggregator": "0xcA4d4D67B90C7eAc78dB552C24C5E9C3B124A476",
     "pythPriceFeed": "0x2F968931d1B7326d2875E9500980211dcc535eE5",
     "collateralPool": "0x864cd49392a4348b5da5337623d994151610D0a3",
     "collateralPoolV2": "0xe1303B2514755A72da4AcA9B917d96F16c842c80",
@@ -46,274 +247,19 @@
       }
     }
   },
-  "Base Mainnet": {
-    "rpcNode": "https://base-rpc.publicnode.com",
-    "account": "lp_account",
-    "is7702Account": false,
-    "jsonWallet": "keystore/wallet.json",
-    "passphrase": "passphrase",
-    "factory": "0x50aB3FE7d089c4F0dD8096aAeA9578f8E7B18AF7",
-    "router": "0x67F671EEc6a7015941cBE5B4397ACceC829aFA3e",
-    "vaultBatchManager": "0x00B47EE1AF66e8928106aaCBfB3E8673D896F6ad",
-    "pythAggregator": "0x2D9DBCe6f1E04ae3377b4175281d293626f82A02",
-    "pythPriceFeed": "0xbC16aee60f64864882BC6C4E428e148Fc0E272F5",
-    "collateralPool": "0x864cd49392a4348b5da5337623d994151610D0a3",
-    "collateralPoolV2": "0xe1303B2514755A72da4AcA9B917d96F16c842c80",
-    "tradingPairs": {
-      "WETH-USDC": {
-        "baseToken": "0x4200000000000000000000000000000000000006",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
-          "decimals": "8"
-        }
-      },
-      "cbBTC-USDC": {
-        "baseToken": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
-          "decimals": "8"
-        }
-      },
-      "AERO-USDC": {
-        "baseToken": "0x940181a94A35A4569E4529A3CDfB74e38FD98631",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x9db37f4d5654aad3e37e2e14ffd8d53265fb3026d1d8f91146539eebaa2ef45f",
-          "decimals": "8"
-        }
-      },
-      "VIRTUAL-USDC": {
-        "baseToken": "0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x8132e3eb1dac3e56939a16ff83848d194345f6688bff97eb1c8bd462d558802b",
-          "decimals": "8"
-        }
-      },
-      "LINK-USDC": {
-        "baseToken": "0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",
-          "decimals": "8"
-        }
-      },
-      "AAVE-USDC": {
-        "baseToken": "0x63706e401c06ac8513145b7687A14804d17f814b",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x2b9ab1e972a281585084148ba1389800799bd4be63b957507db1349314e47445",
-          "decimals": "8"
-        }
-      },
-      "CRV-USDC": {
-        "baseToken": "0x8Ee73c484A26e0A5df2Ee2a4960B789967dd0415",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xa19d04ac696c7a6616d291c7e5d1377cc8be437c327b75adb5dc1bad745fcae8",
-          "decimals": "8"
-        }
-      },
-      "AIXBT-USDC": {
-        "baseToken": "0x4F9Fd6Be4a90f2620860d680c0d4d5Fb53d1A825",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x0fc54579a29ba60a08fdb5c28348f22fd3bec18e221dd6b90369950db638a5a7",
-          "decimals": "8"
-        }
-      },
-      "KAITO-USDC": {
-        "baseToken": "0x98d0baa52b2D063E780DE12F615f963Fe8537553",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x7302dee641a08507c297a7b0c8b3efa74a48a3baa6c040acab1e5209692b7e59",
-          "decimals": "8"
-        }
-      },
-      "PENDLE-USDC": {
-        "baseToken": "0xA99F6e6785Da0F5d6fB42495Fe424BCE029Eeb3E",
-        "quoteToken": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x9a4df90b25497f66b1afb012467e316e801ca3d839456db028892fe8c70c8016",
-          "decimals": "8"
-        }
-      }
-    }
-  },
-  "Base Testnet": {
-    "rpcNode": "https://base-sepolia-rpc.publicnode.com",
-    "account": "lp_account",
-    "is7702Account": false,
-    "jsonWallet": "keystore/wallet.json",
-    "passphrase": "passphrase",
-    "factory": "0x66fe572F6C943f9117E85b8cb008675348F1bF5e",
-    "router": "0xAc0C062A9d0E11CFbb48b5ab84baB4dE31Ba80E1",
-    "vaultBatchManager": "0x38442C6D8eA918dB1C497eB15d1F65628Eb61A43",
-    "pythAggregator": "0x77Cb31b6013EbD8D9eC1533823a28A88e9aD5d42",
-    "pythPriceFeed": "0x5f52e4DBEA21f5b23523B6e20d50c29ae0a4EB83",
-    "collateralPool": "0x2c4CF69941ab957e47a6C6cceD5A520cf14358cc",
-    "collateralPoolV2": "0xaA7667d5ADc8197533851F0eF591734046b80a6e",
-    "tradingPairs": {
-      "WETH-USDC": {
-        "baseToken": "0xA4bBC0d6FA475d9dbe0b6F04333ecc92339ceB2F",
-        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
-          "decimals": "8"
-        }
-      },
-      "AERO-USDC": {
-        "baseToken": "0xc902Ba7eAeF7eC9d72980f643d348859422EF381",
-        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x9db37f4d5654aad3e37e2e14ffd8d53265fb3026d1d8f91146539eebaa2ef45f",
-          "decimals": "8"
-        }
-      },
-      "WSOL-USDC": {
-        "baseToken": "0x4999b48c62D45708809Ea8a04516aA09BA3459d5",
-        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
-          "decimals": "8"
-        }
-      },
-      "DOGE-USDC": {
-        "baseToken": "0xB7175dC778BcFdcB3300bAD0D779B4e96e5AcC1B",
-        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xdcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c",
-          "decimals": "8"
-        }
-      },
-      "SHIB-USDC": {
-        "baseToken": "0x00B47EE1AF66e8928106aaCBfB3E8673D896F6ad",
-        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xf0d57deca57b3da2fe63a493f4c25925fdfd8edf834b20f93e1f84dbd1504d4a",
-          "decimals": "10"
-        }
-      },
-      "PEPE-USDC": {
-        "baseToken": "0x42Da07729297D9aa760F206315FcD58F8b88ffF5",
-        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xd69731a2e74ac1ce884fc3890f7ee324b6deb66147055249568869ed700882e4",
-          "decimals": "10"
-        }
-      },
-      "WBTC-USDC": {
-        "baseToken": "0x1de831Ec40Bf93c1D0C5f6D581AD5d930061C147",
-        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
-          "decimals": "8"
-        }
-      },
-      "VIRTUAL-USDC": {
-        "baseToken": "0x8981b461d3DF0A2f9bE0e1C2e50546dD4C76e303",
-        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x8132e3eb1dac3e56939a16ff83848d194345f6688bff97eb1c8bd462d558802b",
-          "decimals": "8"
-        }
-      },
-      "cbBTC-USDC": {
-        "baseToken": "0xA73E5977CB60D6f04F1F5265CA93EF678E33D83B",
-        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
-          "decimals": "8"
-        }
-      }
-    }
-  },
-  "Ethereum Mainnet": {
-    "rpcNode": "https://ethereum-rpc.publicnode.com",
-    "account": "lp_account",
-    "is7702Account": false,
-    "jsonWallet": "keystore/wallet.json",
-    "passphrase": "passphrase",
-    "factory": "0x50aB3FE7d089c4F0dD8096aAeA9578f8E7B18AF7",
-    "router": "0x137Df25cAbf220A180300604E57551AC1397959d",
-    "vaultBatchManager": "0xb2B9a0C2441072Ca36d89c7B4DEcD6169a2c25fb",
-    "pythAggregator": "0xF50c99923bf0077fAF298Cc1dB089318311cF3ee",
-    "pythPriceFeed": "0x14b9932cc9AC8Ee03301665a8644A753f46D8552",
-    "collateralPool": "0x864cd49392a4348b5da5337623d994151610D0a3",
-    "collateralPoolV2": "0xe1303B2514755A72da4AcA9B917d96F16c842c80",
-    "tradingPairs": {
-      "WBTC-USDC": {
-        "baseToken": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
-        "quoteToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
-          "decimals": "8"
-        }
-      },
-      "WETH-USDC": {
-        "baseToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "quoteToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
-          "decimals": "8"
-        }
-      },
-      "XAUT-USDC": {
-        "baseToken": "0x68749665FF8D2D112Fa859AA293F07A622782F38",
-        "quoteToken": "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67",
-          "decimals": "6"
-        }
-      },
-      "NVDAX-USDC": {
-        "baseToken": "0xc845b2894dBddd03858fd2D643B4eF725fE0849d",
-        "quoteToken": "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x4244d07890e4610f46bbde67de8f43a4bf8b569eebe904f136b469f148503b7f",
-          "decimals": "18"
-        }
-      }
-    }
-  },
   "Ethereum Testnet": {
     "rpcNode": "https://ethereum-sepolia-rpc.publicnode.com",
     "account": "lp_account",
     "is7702Account": false,
     "jsonWallet": "keystore/wallet.json",
     "passphrase": "passphrase",
-    "factory": "0x4bD1e79d52E279B4F6b527CC32F93CD2beE01523",
-    "router": "0xb2d5c91F1e71078672F55C63ac0BBC3A9B1b3889",
-    "vaultBatchManager": "0xf365498d4298A47c33a6315547c7fF31e35e16E2",
-    "pythAggregator": "0x0Ead9e452404fa37885b11F9535C7FaadC4955cA",
+    "factory": "0x50aB3FE7d089c4F0dD8096aAeA9578f8E7B18AF7",
+    "router": "0xc770C5657B285d97A10579242a77e4BE1d803455",
+    "vaultBatchManager": "0x6558e8Cfef372646bE029698412A9EDBbB71538b",
+    "pythAggregator": "0xcA4d4D67B90C7eAc78dB552C24C5E9C3B124A476",
     "pythPriceFeed": "0xBb86bCc951A62DF86826219d9251Ee05F2c1e286",
-    "collateralPool": "0x19E9D6aF9a21d0a332Feb2b6D5890f60aaD9DD42",
-    "collateralPoolV2": "0x64369e4296022ad8b85400CC97286DEE84096523",
+    "collateralPool": "0x864cd49392a4348b5da5337623d994151610D0a3",
+    "collateralPoolV2": "0xe1303B2514755A72da4AcA9B917d96F16c842c80",
     "tradingPairs": {
       "WBTC-USDC": {
         "baseToken": "0x2ec8DeB018B85274Feb514d15ed7566Ba50DAbe6",
@@ -330,15 +276,6 @@
         "priceFeed": {
           "type": "PYTH",
           "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
-          "decimals": "8"
-        }
-      },
-      "AERO-USDC": {
-        "baseToken": "0x4e2d71834D755417fE6ADC4a2F621Fd87e01df26",
-        "quoteToken": "0xf90c543e3D217887998b2178Db8D459dA768F394",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x9db37f4d5654aad3e37e2e14ffd8d53265fb3026d1d8f91146539eebaa2ef45f",
           "decimals": "8"
         }
       },
@@ -378,6 +315,24 @@
           "decimals": "10"
         }
       },
+      "XAUT-USDC": {
+        "baseToken": "0x6A6f0204311965dC7B93250a4f53f192fd8f37AF",
+        "quoteToken": "0xf90c543e3D217887998b2178Db8D459dA768F394",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67",
+          "decimals": "8"
+        }
+      },
+      "AERO-USDC": {
+        "baseToken": "0x4e2d71834D755417fE6ADC4a2F621Fd87e01df26",
+        "quoteToken": "0xf90c543e3D217887998b2178Db8D459dA768F394",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x9db37f4d5654aad3e37e2e14ffd8d53265fb3026d1d8f91146539eebaa2ef45f",
+          "decimals": "8"
+        }
+      },
       "VIRTUAL-USDC": {
         "baseToken": "0xF65EeD85a6E75E964B63227172AB50ca4d04383d",
         "quoteToken": "0xf90c543e3D217887998b2178Db8D459dA768F394",
@@ -387,64 +342,109 @@
           "decimals": "8"
         }
       },
-      "XAUT-USDC": {
-        "baseToken": "0x6A6f0204311965dC7B93250a4f53f192fd8f37AF",
-        "quoteToken": "0xf90c543e3D217887998b2178Db8D459dA768F394",
-        "priceFeed": {
-          "type": "PYTH",
-          "id": "0x44465e17d2e9d390e70c999d5a11fda4f092847fcd2e3e5aa089d96c98a30e67",
-          "decimals": "6"
-        }
-      },
       "NVDAX-USDC": {
         "baseToken": "0x5a75FfC52B4627C465D9eaA654116B9020A00970",
         "quoteToken": "0xf90c543e3D217887998b2178Db8D459dA768F394",
         "priceFeed": {
           "type": "PYTH",
           "id": "0x4244d07890e4610f46bbde67de8f43a4bf8b569eebe904f136b469f148503b7f",
-          "decimals": "18"
+          "decimals": "8"
         }
       }
     }
   },
-  "HyperEVM Mainnet": {
-    "rpcNode": "https://rpc.hyperliquid.xyz/evm",
+  "Base Testnet": {
+    "rpcNode": "https://base-sepolia-rpc.publicnode.com",
     "account": "lp_account",
     "is7702Account": false,
     "jsonWallet": "keystore/wallet.json",
     "passphrase": "passphrase",
     "factory": "0x50aB3FE7d089c4F0dD8096aAeA9578f8E7B18AF7",
-    "router": "0xc29D4eb234145BF009C28b0cD89C75b9072EA125",
-    "vaultBatchManager": "0x4e2d71834D755417fE6ADC4a2F621Fd87e01df26",
-    "pythAggregator": "0xC87bcAAF7B0Af30056e068DCa5b5358BD940451F",
-    "pythPriceFeed": "0x298B2f0ae8Efa7f90D845da02ef2E3a88A9BbC02",
+    "router": "0xc770C5657B285d97A10579242a77e4BE1d803455",
+    "vaultBatchManager": "0x6558e8Cfef372646bE029698412A9EDBbB71538b",
+    "pythAggregator": "0xcA4d4D67B90C7eAc78dB552C24C5E9C3B124A476",
+    "pythPriceFeed": "0x5f52e4DBEA21f5b23523B6e20d50c29ae0a4EB83",
     "collateralPool": "0x864cd49392a4348b5da5337623d994151610D0a3",
     "collateralPoolV2": "0xe1303B2514755A72da4AcA9B917d96F16c842c80",
     "tradingPairs": {
-      "UBTC-USDC": {
-        "baseToken": "0x9FDBdA0A5e284c32744D2f17Ee5c74B284993463",
-        "quoteToken": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+      "WBTC-USDC": {
+        "baseToken": "0x1de831Ec40Bf93c1D0C5f6D581AD5d930061C147",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
         "priceFeed": {
           "type": "PYTH",
           "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
           "decimals": "8"
         }
       },
-      "UETH-USDC": {
-        "baseToken": "0xBe6727B535545C67d5cAa73dEa54865B92CF7907",
-        "quoteToken": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+      "cbBTC-USDC": {
+        "baseToken": "0xA73E5977CB60D6f04F1F5265CA93EF678E33D83B",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+          "decimals": "8"
+        }
+      },
+      "WETH-USDC": {
+        "baseToken": "0xA4bBC0d6FA475d9dbe0b6F04333ecc92339ceB2F",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
         "priceFeed": {
           "type": "PYTH",
           "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
           "decimals": "8"
         }
       },
-      "WHYPE-USDC": {
-        "baseToken": "0x5555555555555555555555555555555555555555",
-        "quoteToken": "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+      "WSOL-USDC": {
+        "baseToken": "0x4999b48c62D45708809Ea8a04516aA09BA3459d5",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
         "priceFeed": {
           "type": "PYTH",
-          "id": "0x4279e31cc369bbcc2faf022b382b080e32a8e689ff20fbc530d2a603eb6cd98b",
+          "id": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+          "decimals": "8"
+        }
+      },
+      "DOGE-USDC": {
+        "baseToken": "0xB7175dC778BcFdcB3300bAD0D779B4e96e5AcC1B",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xdcef50dd0a4cd2dcc17e45df1676dcb336a11a61c69df7a0299b0150c672d25c",
+          "decimals": "8"
+        }
+      },
+      "SHIB-USDC": {
+        "baseToken": "0x00B47EE1AF66e8928106aaCBfB3E8673D896F6ad",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xf0d57deca57b3da2fe63a493f4c25925fdfd8edf834b20f93e1f84dbd1504d4a",
+          "decimals": "10"
+        }
+      },
+      "PEPE-USDC": {
+        "baseToken": "0x42Da07729297D9aa760F206315FcD58F8b88ffF5",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0xd69731a2e74ac1ce884fc3890f7ee324b6deb66147055249568869ed700882e4",
+          "decimals": "10"
+        }
+      },
+      "AERO-USDC": {
+        "baseToken": "0xc902Ba7eAeF7eC9d72980f643d348859422EF381",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x9db37f4d5654aad3e37e2e14ffd8d53265fb3026d1d8f91146539eebaa2ef45f",
+          "decimals": "8"
+        }
+      },
+      "VIRTUAL-USDC": {
+        "baseToken": "0x8981b461d3DF0A2f9bE0e1C2e50546dD4C76e303",
+        "quoteToken": "0x8Dcf7eeB4442059601BbFd0a65ffF8d6E7B538D9",
+        "priceFeed": {
+          "type": "PYTH",
+          "id": "0x8132e3eb1dac3e56939a16ff83848d194345f6688bff97eb1c8bd462d558802b",
           "decimals": "8"
         }
       }

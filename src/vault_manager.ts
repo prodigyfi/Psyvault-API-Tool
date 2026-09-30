@@ -37,6 +37,8 @@ const DEFAULT_VAULT_FETCH_COUNT = 100;
 
 const erc20Interface = new ethers.Interface(IERC20ABI);
 const factoryInterface = new ethers.Interface(FactoryABI);
+const routerInterface = new ethers.Interface(RouterABI);
+const vaultInterface = new ethers.Interface(VaultABI);
 
 const ALLOWANCE_VISIBILITY_ATTEMPTS = 10;
 const ALLOWANCE_VISIBILITY_INTERVAL_MS = 1_000;
@@ -62,6 +64,23 @@ type Erc7579Call = {
 type BatchExecutionResult =
   | { status: "sent"; receipt: ContractTransactionReceipt }
   | { status: "unsupported" };
+
+type ApproveSpec = {
+  token: ethers.Contract;
+  tokenAddress: string;
+  spender: string;
+  amount: string;
+};
+
+// Error fragments used to decode reverts inside a batched execution
+const BATCH_ERROR_FRAGMENTS = [
+  ...FactoryABI,
+  ...RouterABI,
+  ...VaultABI,
+  ...VaultCore,
+  ...CollateralPoolABI,
+  ...IERC20ABI,
+].filter((fragment) => fragment.type === "error");
 
 export class VaultManager {
   config: BlockchainConfig;
@@ -177,6 +196,100 @@ export class VaultManager {
     return this._detectDelegationOnChain();
   }
 
+  // Parse the --is7702Account CLI option
+  private _parseIs7702Override(value: unknown): boolean | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value !== "true" && value !== "false") {
+      throw new Error("is7702Account value not valid");
+    }
+    return value === "true";
+  }
+
+  // Approve the tokens and execute the main call
+  private async _approveAndExecute(
+    approvals: ApproveSpec[],
+    mainCall: Erc7579Call,
+    is7702Override?: boolean,
+  ): Promise<ContractTransactionReceipt | null> {
+    const approveSequentially = async () => {
+      for (const approval of approvals) {
+        await this._approveERC20(
+          approval.token,
+          approval.spender,
+          approval.amount,
+        );
+      }
+    };
+
+    let use7702 = await this._is7702Account(is7702Override);
+    // Check if the account has EIP-7702 delegation
+    if (use7702 && !this._isRelayerMode()) {
+      const delegated = await this._detectDelegationOnChain();
+      if (!delegated) {
+        console.log("Account has no EIP-7702 delegation on-chain");
+        use7702 = false;
+      }
+    }
+
+    if (use7702) {
+      const approveCalls = (
+        await Promise.all(
+          approvals.map((approval) =>
+            this._buildApproveCallIfNeeded(
+              approval.token,
+              approval.tokenAddress,
+              approval.spender,
+              approval.amount,
+            ),
+          ),
+        )
+      ).filter((call): call is Erc7579Call => call !== null);
+
+      const batch = await this._tryExecuteBatch(
+        [...approveCalls, mainCall],
+        mainCall.value,
+      );
+      if (batch.status === "sent") {
+        return batch.receipt;
+      }
+      // Approve sequentially if not support batch
+      await approveSequentially();
+      return null;
+    }
+
+    if (approvals.length <= 1) {
+      await approveSequentially();
+      return null;
+    }
+
+    const results = await Promise.allSettled(
+      approvals.map((approval) =>
+        this._approveERC20(approval.token, approval.spender, approval.amount),
+      ),
+    );
+    const failures = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failures.length > 0) {
+      if (
+        !failures.some((failure) => this._isInflightLimitError(failure.reason))
+      ) {
+        throw failures[0].reason;
+      }
+      console.warn(
+        "Concurrent approvals failed, please check the is7702Account setting; retrying sequentially.",
+      );
+      // Reset the nonce manager
+      if (this.signer instanceof NonceManager) {
+        this.signer.reset();
+      }
+      await approveSequentially();
+    }
+    return null;
+  }
+
   // Try to execute the calls
   private async _tryExecuteBatch(
     calls: Erc7579Call[],
@@ -196,11 +309,7 @@ export class VaultManager {
     // Merge error fragments in nested errors
     const account = new ethers.Contract(
       ownAddress,
-      [
-        ...ERC7579_EXECUTE_ABI,
-        ...FactoryABI.filter((fragment) => fragment.type === "error"),
-        ...IERC20ABI.filter((fragment) => fragment.type === "error"),
-      ],
+      [...ERC7579_EXECUTE_ABI, ...BATCH_ERROR_FRAGMENTS],
       this.signer,
     );
     const executionCalldata = ethers.AbiCoder.defaultAbiCoder().encode(
@@ -670,17 +779,9 @@ export class VaultManager {
   async createVault(createVaultOptions) {
     const isBuyLow = !!createVaultOptions.isBuyLow;
     const useCollateralPool = !!createVaultOptions.useCollateralPool;
-    if (
-      createVaultOptions.is7702Account !== undefined &&
-      createVaultOptions.is7702Account !== "true" &&
-      createVaultOptions.is7702Account !== "false"
-    ) {
-      throw new Error('is7702Account value not valid');
-    }
-    const is7702Override =
-      createVaultOptions.is7702Account === undefined
-        ? undefined
-        : createVaultOptions.is7702Account === "true";
+    const is7702Override = this._parseIs7702Override(
+      createVaultOptions.is7702Account,
+    );
     const tradingPair = createVaultOptions.tradingPair;
     const useNativeToken = !!createVaultOptions.useNativeToken;
     const vaultSeriesVersion = createVaultOptions.vaultSeriesVersion || 1;
@@ -807,104 +908,31 @@ export class VaultManager {
           linkedPriceBN,
         );
 
-      const approveSequentially = async () => {
-        await this._approveERC20(
-          linkedToken,
-          this.config.factory,
-          linkedTokenAmount.toString(),
-        );
-        await this._approveERC20(
-          investmentToken,
-          this.config.factory,
-          investmentTokenAmount.toString(),
-        );
-      };
-
-      let use7702 = await this._is7702Account(is7702Override);
-      // Check if the account has EIP-7702 delegation
-      if (use7702 && !this._isRelayerMode()) {
-        const delegated = await this._detectDelegationOnChain();
-        if (!delegated) {
-          console.log(
-            "Account has no EIP-7702 delegation on-chain",
-          );
-          use7702 = false;
-        }
-      }
-
-      if (use7702) {
-        const approveCalls = (
-          await Promise.all([
-            this._buildApproveCallIfNeeded(
-              linkedToken,
-              linkedTokenAddress,
-              this.config.factory,
-              linkedTokenAmount.toString(),
-            ),
-            this._buildApproveCallIfNeeded(
-              investmentToken,
-              investmentTokenAddress,
-              this.config.factory,
-              investmentTokenAmount.toString(),
-            ),
-          ])
-        ).filter((call): call is Erc7579Call => call !== null);
-
-        const batch = await this._tryExecuteBatch(
-          [
-            ...approveCalls,
-            {
-              target: this.config.factory,
-              value: BigInt(updateFee),
-              data: factoryInterface.encodeFunctionData("createVault", [
-                vaultParams,
-                binaryData,
-              ]),
-            },
-          ],
-          BigInt(updateFee),
-        );
-        if (batch.status === "sent") {
-          result = batch.receipt;
-        } else {
-          // Approve sequentially if not support batch
-          await approveSequentially();
-        }
-      } else {
-        const approvals = await Promise.allSettled([
-          this._approveERC20(
-            linkedToken,
-            this.config.factory,
-            linkedTokenAmount.toString(),
-          ),
-          this._approveERC20(
-            investmentToken,
-            this.config.factory,
-            investmentTokenAmount.toString(),
-          ),
-        ]);
-        const failures = approvals.filter(
-          (approval): approval is PromiseRejectedResult =>
-            approval.status === "rejected",
-        );
-        if (failures.length > 0) {
-          if (
-            !failures.some((failure) =>
-              this._isInflightLimitError(failure.reason),
-            )
-          ) {
-            throw failures[0].reason;
-          }
-          console.warn(
-            "Concurrent approvals failed, please check the is7702Account setting; retrying sequentially.",
-          );
-          // Reset the nonce manager
-          if (this.signer instanceof NonceManager) {
-            this.signer.reset();
-          }
-          await approveSequentially();
-        }
-      }
+      result = await this._approveAndExecute(
+        [
+          {
+            token: linkedToken,
+            tokenAddress: linkedTokenAddress,
+            spender: this.config.factory,
+            amount: linkedTokenAmount.toString(),
+          },
+          {
+            token: investmentToken,
+            tokenAddress: investmentTokenAddress,
+            spender: this.config.factory,
+            amount: investmentTokenAmount.toString(),
+          },
+        ],
+        {
+          target: this.config.factory,
+          value: BigInt(updateFee),
+          data: factoryInterface.encodeFunctionData("createVault", [
+            vaultParams,
+            binaryData,
+          ]),
+        },
+        is7702Override,
+      );
     }
 
     if (!result) {
@@ -977,7 +1005,12 @@ export class VaultManager {
     }
   }
 
-  async adjustVaultYield(vaultAddress: string, yieldPercentage: string) {
+  async adjustVaultYield(
+    vaultAddress: string,
+    yieldPercentage: string,
+    is7702Account?: string,
+  ) {
+    const is7702Override = this._parseIs7702Override(is7702Account);
     const yieldValue = parseUnits(yieldPercentage, fixDecimals - 2).toString();
     const vault = new ethers.Contract(vaultAddress, VaultABI, this.signer);
     const currentYieldValue = await vault.yieldValue();
@@ -990,6 +1023,7 @@ export class VaultManager {
     }
 
     const useCollateralPool = await this._checkUseCollateralPool(vault);
+    const approvals: ApproveSpec[] = [];
 
     if (!useCollateralPool) {
       this.provider.isMulticallEnabled = true;
@@ -1060,41 +1094,54 @@ export class VaultManager {
 
       // approve the difference
       if (newOwnerDepositLinkedTokenAmount > ownerDepositLinkedTokenAmount) {
-        const linkedToken = await this._getToken(linkedTokenAddress);
-        await this._approveERC20(
-          linkedToken,
-          vaultAddress,
-          (
+        approvals.push({
+          token: await this._getToken(linkedTokenAddress),
+          tokenAddress: linkedTokenAddress,
+          spender: vaultAddress,
+          amount: (
             newOwnerDepositLinkedTokenAmount - ownerDepositLinkedTokenAmount
           ).toString(),
-        );
+        });
       }
       if (
         newOwnerDepositInvestmentTokenAmount > ownerDepositInvestmentTokenAmount
       ) {
-        const investmentToken = await this._getToken(investmentTokenAddress);
-        await this._approveERC20(
-          investmentToken,
-          vaultAddress,
-          (
+        approvals.push({
+          token: await this._getToken(investmentTokenAddress),
+          tokenAddress: investmentTokenAddress,
+          spender: vaultAddress,
+          amount: (
             newOwnerDepositInvestmentTokenAmount -
             ownerDepositInvestmentTokenAmount
           ).toString(),
-        );
+        });
       }
     }
 
     try {
-      await this._simulateTransaction(() =>
-        vault.adjustYieldValue.staticCall(yieldValue),
+      let result = await this._approveAndExecute(
+        approvals,
+        {
+          target: vaultAddress,
+          value: 0n,
+          data: vaultInterface.encodeFunctionData("adjustYieldValue", [
+            yieldValue,
+          ]),
+        },
+        is7702Override,
       );
 
-      const result: ContractTransactionReceipt =
-        await this._sendContractTxAndWait({
+      if (!result) {
+        await this._simulateTransaction(() =>
+          vault.adjustYieldValue.staticCall(yieldValue),
+        );
+
+        result = await this._sendContractTxAndWait({
           contract: vault,
           functionName: "adjustYieldValue",
           functionArgs: [yieldValue],
         });
+      }
       if (result.status == 1) {
         console.log(
           `Vault ${vaultAddress} yield adjusted to ${yieldPercentage}% successfully`,
@@ -1104,7 +1151,9 @@ export class VaultManager {
       }
     } catch (error) {
       console.error(`Vault ${vaultAddress} yield adjust failed`);
-      console.error((error as EthersError).shortMessage);
+      console.error(
+        (error as EthersError).shortMessage ?? (error as Error).message,
+      );
     }
   }
 
@@ -1193,7 +1242,9 @@ export class VaultManager {
     vaultAddress: string,
     amount: string,
     signatureOptions?: SubscribeVaultSignatureOptions,
+    is7702Account?: string,
   ) {
+    const is7702Override = this._parseIs7702Override(is7702Account);
     const signature = signatureOptions?.signature?.trim();
     const signedDeposit = !!signature;
 
@@ -1245,11 +1296,6 @@ export class VaultManager {
       amount,
       investmentTokenDecimals,
     ).toString();
-    await this._approveERC20(
-      investmentToken,
-      this.config.router,
-      subscribeAmount,
-    );
 
     // Get data from price feed
     const tradingPair = await this._getTradingPairOfVault(
@@ -1271,77 +1317,70 @@ export class VaultManager {
     const updateFee = await pythPriceFeed.getUpdateFee(binaryData);
     const minYieldValue = !!vault.minYieldValue || 0;
 
+    const router = new ethers.Contract(
+      this.config.router,
+      RouterABI,
+      this.signer,
+    );
+
+    const depositArgs = signedDeposit
+      ? [
+          vaultAddress,
+          subscribeAmount,
+          signedYieldValue,
+          nonce,
+          deadline,
+          signature,
+          minYieldValue,
+          binaryData,
+        ]
+      : [vaultAddress, subscribeAmount, minYieldValue, binaryData];
+
+    const depositFragment = routerInterface.getFunction("deposit", depositArgs);
+    if (!depositFragment) {
+      throw new Error(
+        "Router deposit overload not found for the given arguments",
+      );
+    }
+    const depositSignature = depositFragment.format();
+
     try {
-      const router = new ethers.Contract(
-        this.config.router,
-        RouterABI,
-        this.signer,
+      let result = await this._approveAndExecute(
+        [
+          {
+            token: investmentToken,
+            tokenAddress: investmentTokenAddress,
+            spender: this.config.router,
+            amount: subscribeAmount,
+          },
+        ],
+        {
+          target: this.config.router,
+          value: BigInt(updateFee),
+          data: routerInterface.encodeFunctionData(
+            depositSignature,
+            depositArgs,
+          ),
+        },
+        is7702Override,
       );
 
-      if (signedDeposit) {
+      if (!result) {
         await this._simulateTransaction(
           () =>
-            router.deposit.staticCall(
-              vaultAddress,
-              subscribeAmount,
-              signedYieldValue,
-              nonce,
-              deadline,
-              signature,
-              minYieldValue,
-              binaryData,
-              { value: updateFee },
-            ),
+            router[depositSignature].staticCall(...depositArgs, {
+              value: updateFee,
+            }),
           { ignoreOverflow: true },
         );
 
-        const result = await this._sendContractTxAndWait({
+        result = await this._sendContractTxAndWait({
           contract: router,
-          functionName: "deposit",
-          functionArgs: [
-            vaultAddress,
-            subscribeAmount,
-            signedYieldValue,
-            nonce,
-            deadline,
-            signature,
-            minYieldValue,
-            binaryData,
-          ],
+          functionName: depositSignature,
+          functionArgs: depositArgs,
           overrides: { value: updateFee },
         });
-
-        if (result.status == 1) {
-          console.log(`Vault ${vaultAddress} subscribed successfully`);
-        } else {
-          console.error(`Vault ${vaultAddress} subscribed failed`);
-        }
-        return;
       }
-
-      await this._simulateTransaction(
-        () =>
-          router.deposit.staticCall(
-            vaultAddress,
-            subscribeAmount,
-            minYieldValue,
-            binaryData,
-            { value: updateFee },
-          ),
-        { ignoreOverflow: true },
-      );
-
-      const result = await this._sendContractTxAndWait({
-        contract: router,
-        functionName: "deposit",
-        functionArgs: [
-          vaultAddress,
-          subscribeAmount,
-          minYieldValue,
-          binaryData,
-        ],
-        overrides: { value: updateFee },
-      });
 
       if (result.status == 1) {
         console.log(`Vault ${vaultAddress} subscribed successfully`);
@@ -1350,7 +1389,9 @@ export class VaultManager {
       }
     } catch (error) {
       console.error(`Vault ${vaultAddress} subscribed failed`);
-      console.error((error as EthersError).shortMessage);
+      console.error(
+        (error as EthersError).shortMessage ?? (error as Error).message,
+      );
     }
   }
 

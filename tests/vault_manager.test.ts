@@ -548,7 +548,7 @@ describe("VaultManager createVault", () => {
         ...mockBuyLowVaultOptions,
         is7702Account: "flse",
       }),
-    ).rejects.toThrow('is7702Account value not valid');
+    ).rejects.toThrow("is7702Account value not valid");
   });
 
   test("should throw error when using custom signer with vault series version 1", async () => {
@@ -673,16 +673,20 @@ describe("VaultManager createVault with ERC-7579 batch", () => {
       })(),
       execute,
     };
-    return { contract, execute, executeStaticCall, approveWait, createVaultWait };
+    return {
+      contract,
+      execute,
+      executeStaticCall,
+      approveWait,
+      createVaultWait,
+    };
   };
 
   const delegatedCode = "0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b";
 
   const newVaultManager = (onChainCode: string = delegatedCode) => {
     const vaultManager = new VaultManager(is7702Config, mockBasicSettings);
-    jest
-      .spyOn(vaultManager.provider, "getCode")
-      .mockResolvedValue(onChainCode);
+    jest.spyOn(vaultManager.provider, "getCode").mockResolvedValue(onChainCode);
     jest
       .spyOn(vaultManager.pythConnection, "getLatestPriceUpdates")
       .mockResolvedValue({
@@ -826,8 +830,13 @@ describe("VaultManager createVault with ERC-7579 batch", () => {
       .mockReturnValueOnce(0n) // linked token needs approve
       .mockReturnValueOnce(0n) // investment token needs approve
       .mockReturnValue(bigAllowance); // visibility polls succeed
-    const { contract, execute, executeStaticCall, approveWait, createVaultWait } =
-      buildBatchMocks({ allowance });
+    const {
+      contract,
+      execute,
+      executeStaticCall,
+      approveWait,
+      createVaultWait,
+    } = buildBatchMocks({ allowance });
     jest
       .spyOn(ethers, "Contract")
       .mockReturnValue(contract as unknown as ethers.Contract);
@@ -1037,7 +1046,192 @@ describe("VaultManager cancelVault", () => {
   });
 });
 
+describe("VaultManager ERC-7579 batch for subscribeVault and adjustVaultYield", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const is7702Config = { ...mockConfig, is7702Account: true };
+  const delegatedCode = "0xef010063c0c19a282a1b52b07dd5a65b58948a07dae32b";
+  const routerInterface = new ethers.Interface(RouterAbi);
+  const vaultInterface = new ethers.Interface(VaultABI);
+  const erc20Interface = new ethers.Interface(IERC20ABI);
+
+  const buildTxFn = () => {
+    const wait = jest
+      .fn<() => Promise<object>>()
+      .mockResolvedValue({ status: 1 });
+    const fn = jest.fn().mockReturnValue({ wait });
+    (fn as any).staticCall = jest
+      .fn()
+      .mockImplementation(() => Promise.resolve());
+    return fn;
+  };
+
+  const decodeBatchCalls = (executionCalldata: string) => {
+    const [calls] = ethers.AbiCoder.defaultAbiCoder().decode(
+      ["tuple(address target, uint256 value, bytes callData)[]"],
+      executionCalldata,
+    );
+    return calls;
+  };
+
+  const newVaultManager = () => {
+    const vaultManager = new VaultManager(is7702Config, mockBasicSettings);
+    jest
+      .spyOn(vaultManager.provider, "getCode")
+      .mockResolvedValue(delegatedCode);
+    jest
+      .spyOn(vaultManager.pythConnection, "getLatestPriceUpdates")
+      .mockResolvedValue({
+        binary: { encoding: "hex", data: [mockHexData] },
+        parsed: mockedParsedData,
+      });
+    return vaultManager;
+  };
+
+  test("subscribeVault batches approve + deposit into a single transaction", async () => {
+    const mockContract = {
+      investmentToken: jest.fn().mockReturnValue(tradingPairConfig.quoteToken),
+      linkedToken: jest.fn().mockReturnValue(tradingPairConfig.baseToken),
+      decimals: jest.fn().mockReturnValue(6),
+      balanceOf: jest.fn().mockReturnValue(9000000000000000n),
+      allowance: jest.fn().mockReturnValue(0n),
+      name: jest.fn().mockReturnValue("USDC"),
+      isBuyLow: jest.fn().mockReturnValue(true),
+      symbol: jest.fn().mockReturnValueOnce("WETH").mockReturnValueOnce("USDC"),
+      getUpdateFee: jest.fn().mockReturnValue(1n),
+      approve: buildTxFn(),
+      deposit: buildTxFn(),
+      execute: buildTxFn(),
+    };
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(mockContract as unknown as ethers.Contract);
+
+    const vaultManager = newVaultManager();
+    await vaultManager.subscribeVault(mockVaultAddress, "1");
+
+    expect(mockContract.execute).toHaveBeenCalledTimes(1);
+    expect(mockContract.approve).not.toHaveBeenCalled();
+    expect(mockContract.deposit).not.toHaveBeenCalled();
+    expect(mockConsoleLog).toHaveBeenCalledWith(
+      `Vault ${mockVaultAddress} subscribed successfully`,
+    );
+
+    const [mode, executionCalldata, overrides] = mockContract.execute.mock
+      .calls[0] as [string, string, { value: bigint }];
+    expect(mode).toBe(ERC7579_BATCH_MODE);
+    expect(overrides.value).toBe(1n);
+    const calls = decodeBatchCalls(executionCalldata);
+    expect(calls.length).toBe(2);
+
+    expect(calls[0].target).toBe(tradingPairConfig.quoteToken);
+    const approve = erc20Interface.parseTransaction({
+      data: calls[0].callData,
+    });
+    expect(approve?.args[0]).toBe(mockConfig.router);
+    expect(approve?.args[1]).toBe(1000000n);
+
+    expect(calls[1].target).toBe(mockConfig.router);
+    expect(calls[1].value).toBe(1n);
+    const deposit = routerInterface.parseTransaction({
+      data: calls[1].callData,
+    });
+    expect(deposit?.signature).toBe("deposit(address,uint256,uint256,bytes[])");
+    expect(deposit?.args[0]).toBe(mockVaultAddress);
+    expect(deposit?.args[1]).toBe(1000000n);
+  });
+
+  test("adjustVaultYield batches approve + approve + adjustYieldValue into a single transaction", async () => {
+    jest
+      .spyOn(utils, "calculateTokenAmounts")
+      .mockReturnValueOnce({
+        linkedTokenAmount: 318000000000000000n,
+        investmentTokenAmount: 45900000n,
+      })
+      .mockReturnValueOnce({
+        linkedTokenAmount: 6384000000000000000n,
+        investmentTokenAmount: 1744200000n,
+      });
+    const mockContract = {
+      version: jest.fn<() => Promise<number>>().mockResolvedValue(8),
+      useCollateralPool: jest.fn().mockReturnValue(false),
+      linkedToken: jest.fn().mockReturnValue(tradingPairConfig.baseToken),
+      investmentToken: jest.fn().mockReturnValue(tradingPairConfig.quoteToken),
+      isBuyLow: jest.fn().mockReturnValue(true),
+      quantity: jest.fn().mockReturnValue(15000000000),
+      depositTotal: jest.fn().mockReturnValue(250000000n),
+      linkedPrice: jest.fn().mockReturnValue(2500000000n),
+      yieldValue: jest.fn().mockReturnValue(60000000000000000n),
+      tradingFeeRate: jest.fn().mockReturnValue(20000000000000000n),
+      oraclePriceAtCreation: jest.fn().mockReturnValue(260000000000n),
+      ownerDepositLinkedTokenAmount: jest
+        .fn()
+        .mockReturnValue(6360000000000000000n),
+      ownerDepositInvestmentTokenAmount: jest.fn().mockReturnValue(918000000n),
+      balanceOf: jest.fn().mockReturnValue(900000000000000000000000000n),
+      allowance: jest.fn().mockReturnValue(0n),
+      name: jest.fn().mockReturnValue("ETH"),
+      approve: buildTxFn(),
+      adjustYieldValue: buildTxFn(),
+      execute: buildTxFn(),
+    };
+    jest
+      .spyOn(ethers, "Contract")
+      .mockReturnValue(mockContract as unknown as ethers.Contract);
+
+    const vaultManager = newVaultManager();
+    await vaultManager.adjustVaultYield(mockVaultAddress, "12.0");
+
+    expect(mockContract.execute).toHaveBeenCalledTimes(1);
+    expect(mockContract.approve).not.toHaveBeenCalled();
+    expect(mockContract.adjustYieldValue).not.toHaveBeenCalled();
+    expect(mockConsoleLog).toHaveBeenCalledWith(
+      `Vault ${mockVaultAddress} yield adjusted to 12.0% successfully`,
+    );
+
+    const [mode, executionCalldata, overrides] = mockContract.execute.mock
+      .calls[0] as [string, string, { value: bigint }];
+    expect(mode).toBe(ERC7579_BATCH_MODE);
+    expect(overrides.value).toBe(0n);
+    const calls = decodeBatchCalls(executionCalldata);
+    expect(calls.length).toBe(3);
+
+    expect(calls[0].target).toBe(tradingPairConfig.baseToken);
+    const linkedApprove = erc20Interface.parseTransaction({
+      data: calls[0].callData,
+    });
+    expect(linkedApprove?.args[0]).toBe(mockVaultAddress);
+    expect(linkedApprove?.args[1]).toBe(342000000000000000n);
+
+    expect(calls[1].target).toBe(tradingPairConfig.quoteToken);
+    const investmentApprove = erc20Interface.parseTransaction({
+      data: calls[1].callData,
+    });
+    expect(investmentApprove?.args[0]).toBe(mockVaultAddress);
+    expect(investmentApprove?.args[1]).toBe(872100000n);
+
+    expect(calls[2].target).toBe(mockVaultAddress);
+    expect(calls[2].value).toBe(0n);
+    const adjust = vaultInterface.parseTransaction({ data: calls[2].callData });
+    expect(adjust?.name).toBe("adjustYieldValue");
+    expect(adjust?.args[0]).toBe(120000000000000000n);
+  });
+});
+
 describe("VaultManager subscribeVault", () => {
+  const depositSignatures = new ethers.Interface(RouterAbi).fragments
+    .filter((fragment) => fragment.type === "function")
+    .map((fragment) => fragment.format())
+    .filter((signature) => signature.startsWith("deposit("));
+  const withDepositOverloads = (mockContract: { deposit: unknown }) => {
+    for (const signature of depositSignatures) {
+      (mockContract as Record<string, unknown>)[signature] =
+        mockContract.deposit;
+    }
+  };
+
   afterEach(() => {
     jest.clearAllMocks();
   });
@@ -1088,6 +1282,7 @@ describe("VaultManager subscribeVault", () => {
       getUpdateFee: jest.fn().mockReturnValue(1n),
     };
 
+    withDepositOverloads(mockContract);
     const spyContract = jest
       .spyOn(ethers, "Contract")
       .mockReturnValue(mockContract as unknown as ethers.Contract);
@@ -1184,6 +1379,7 @@ describe("VaultManager subscribeVault", () => {
       getUpdateFee: jest.fn().mockReturnValue(1n),
     };
 
+    withDepositOverloads(mockContract);
     jest
       .spyOn(ethers, "Contract")
       .mockReturnValue(mockContract as unknown as ethers.Contract);
@@ -1253,6 +1449,7 @@ describe("VaultManager subscribeVault", () => {
       getUpdateFee: jest.fn().mockReturnValue(1n),
     };
 
+    withDepositOverloads(mockContract);
     jest
       .spyOn(ethers, "Contract")
       .mockReturnValue(mockContract as unknown as ethers.Contract);

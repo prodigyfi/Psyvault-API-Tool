@@ -93,6 +93,7 @@ async function main() {
       await vaultManager.adjustVaultYield(
         adjustVaultYieldOptions.vault,
         adjustVaultYieldOptions.yieldPercentage,
+        adjustVaultYieldOptions.is7702Account,
       );
       break;
     }
@@ -162,6 +163,7 @@ async function main() {
           nonce: subscribeVaultOptions.nonce,
           deadline: subscribeVaultOptions.deadline,
         },
+        subscribeVaultOptions.is7702Account,
       );
       break;
     }

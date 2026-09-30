@@ -18,11 +18,13 @@ export const subscribeVaultOperationDefinitions = [
   { name: "signedYieldValue", type: String },
   { name: "nonce", type: String },
   { name: "deadline", alias: "d", type: String },
+  { name: "is7702Account", type: String },
 ];
 
 export const adjustVaultYieldOperationDefinitions = [
   { name: "vault", alias: "v", type: String },
   { name: "yieldPercentage", alias: "y", type: String },
+  { name: "is7702Account", type: String },
 ];
 
 export const approveVaultOperationDefinitions = [
@@ -55,7 +57,4 @@ export const ERC7579_BATCH_MODE =
   "0x0100000000000000000000000000000000000000000000000000000000000000";
 
 // UnsupportedCallType / UnsupportedExecType
-export const ERC7579_UNSUPPORTED_ERROR_SELECTORS = [
-  "0xb96fcfe4",
-  "0x1187dc06",
-];
+export const ERC7579_UNSUPPORTED_ERROR_SELECTORS = ["0xb96fcfe4", "0x1187dc06"];
